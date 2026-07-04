@@ -1,0 +1,2154 @@
+<!--
+  Agronome - Unified App
+  Merges: (1) the 6 farmer-facing advisory tools - now powered by live Claude
+  API calls instead of static lookup tables - with (2) the Field Office CRM
+  that tracks every farmer profile and every AI interaction generated.
+  Data persists via window.storage.
+-->
+<div id="app">
+  <div class="boot">Loading the field office...</div>
+</div>
+
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,440..700&family=IBM+Plex+Mono:wght@500;600&family=Inter:wght@400;500;600;700&display=swap');
+  :root{
+    --soil:#241d12; --soil-2:#5c4d34;
+    --field:#2c5a29; --field-deep:#152c11; --leaf:#4f8a3d;
+    --wheat:#dcaa2f; --wheat-soft:#f0dca0;
+    --cream:#f6f0df; --cream-2:#ece1c4; --paper:#fffcf5;
+    --line:#d9caa4; --rust:#ad5029; --rust-bg:#faece3;
+    --sky:#37647f; --sky-bg:#e8f1f5;
+    --shadow:0 1px 0 rgba(36,29,18,.05), 0 10px 28px -14px rgba(36,29,18,.32);
+    --shadow-lift:0 1px 0 rgba(36,29,18,.06), 0 18px 36px -16px rgba(36,29,18,.4);
+    --font-display:"Fraunces",Georgia,"Times New Roman",serif;
+    --font-body:"Inter","Helvetica Neue",Arial,sans-serif;
+    --font-mono:"IBM Plex Mono","SF Mono",Consolas,monospace;
+    --furrow:repeating-linear-gradient(115deg, var(--wheat) 0px, var(--wheat) 3px, transparent 3px, transparent 17px);
+  }
+  #app.dark{
+    --soil:#ece6d8; --soil-2:#b9ae98;
+    --field:#4f8a3d; --field-deep:#1d3d1c; --leaf:#6fae59;
+    --wheat:#e8c24f; --wheat-soft:#8a6d1f;
+    --cream:#1b1710; --cream-2:#2a251c; --paper:#221d15;
+    --line:#3a3222; --rust:#d97a52; --rust-bg:#3a241c;
+    --sky:#6fa8c4; --sky-bg:#1c2f38;
+    --shadow:0 1px 0 rgba(0,0,0,.2), 0 10px 28px -14px rgba(0,0,0,.6);
+    --shadow-lift:0 1px 0 rgba(0,0,0,.25), 0 18px 36px -16px rgba(0,0,0,.7);
+  }
+  *{box-sizing:border-box;}
+  *:focus-visible{outline:2.5px solid var(--sky);outline-offset:2px;border-radius:4px;}
+  #app{
+    font-family:var(--font-body);
+    color:var(--soil);
+    background:radial-gradient(1200px 400px at 80% -10%, rgba(220,170,47,.13), transparent 60%), var(--cream);
+    min-height:100vh; -webkit-font-smoothing:antialiased; font-size:14px;
+  }
+  .boot{padding:80px;text-align:center;color:var(--soil-2);font-style:italic;}
+  @media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important;}}
+
+  /* ---------- Masthead ---------- */
+  header.top{background:linear-gradient(180deg,var(--field) 0%,var(--field-deep) 100%);color:var(--cream);padding:20px 26px 0;position:relative;}
+  header.top::after{content:"";display:block;height:7px;margin-top:20px;background:var(--furrow);opacity:.9;}
+  .brandrow{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+  .sprout{width:40px;height:40px;border-radius:9px;background:var(--wheat);display:grid;place-items:center;font-size:21px;flex:none;box-shadow:inset 0 -3px 0 rgba(0,0,0,.14);}
+  .brandrow h1{font-family:var(--font-display);font-size:22px;letter-spacing:.1px;margin:0;font-weight:600;font-optical-sizing:auto;}
+  .brandrow .sub{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:1.8px;color:var(--wheat-soft);opacity:.95;}
+  .modeswitch{margin-left:auto;display:flex;gap:3px;background:rgba(0,0,0,.18);padding:3px;border-radius:10px;}
+  .modeswitch button{font:inherit;font-size:12.5px;font-weight:700;letter-spacing:.2px;padding:8px 14px;border:0;border-radius:8px;background:transparent;color:var(--wheat-soft);cursor:pointer;display:flex;align-items:center;gap:6px;transition:background .15s,color .15s;}
+  .modeswitch button.active{background:var(--wheat);color:var(--field-deep);}
+
+  nav.subnav{display:flex;gap:2px;margin-top:14px;flex-wrap:wrap;padding-bottom:0;}
+  nav.subnav button{background:transparent;border:0;color:var(--wheat-soft);font:inherit;font-size:13px;font-weight:500;padding:10px 15px;cursor:pointer;border-radius:8px 8px 0 0;border-bottom:3px solid transparent;letter-spacing:.2px;display:flex;align-items:center;gap:6px;transition:background .15s,color .15s,border-color .15s;}
+  nav.subnav button:hover{color:#fff;background:rgba(255,255,255,.06);}
+  nav.subnav button.active{background:var(--cream);color:var(--field-deep);font-weight:600;border-bottom:3px solid var(--cream);}
+
+  /* ---------- Farmer context bar ---------- */
+  .ctxbar{background:var(--wheat-soft);border-bottom:1px solid var(--line);padding:9px 26px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;font-size:12.5px;}
+  .lang-bar{padding:8px 26px 0;display:flex;align-items:center;gap:8px;font-size:11.5px;color:var(--wheat-soft);}
+  .lang-lab{text-transform:uppercase;letter-spacing:.6px;font-size:10px;opacity:.85;}
+  .lang-bar select{font:inherit;font-size:11.5px;padding:4px 8px;border-radius:6px;border:1px solid rgba(255,255,255,.25);background:rgba(255,255,255,.1);color:#fff;}
+  .lang-bar select option{color:#111;}
+  .ctxbar .lab{font-weight:700;color:var(--field-deep);text-transform:uppercase;letter-spacing:.8px;font-size:10.5px;}
+  .ctxbar select{font:inherit;font-size:12.5px;padding:5px 9px;border:1px solid var(--line);border-radius:7px;background:var(--paper);color:var(--soil);max-width:260px;}
+  .ctxbar .hint{color:var(--soil-2);font-style:italic;}
+  .ctxbar .btn.tiny{padding:5px 10px;font-size:11.5px;}
+
+  /* ---------- Layout ---------- */
+  main{padding:24px 26px 60px;max-width:1180px;margin:0 auto;}
+  .view,.panel{display:none;animation:fade .25s ease;}
+  .view.active,.panel.active{display:block;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:none;}}
+
+  .eyebrow{font-family:var(--font-mono);font-size:10.5px;text-transform:uppercase;letter-spacing:1.8px;color:var(--leaf);font-weight:600;margin:0 0 4px;}
+  h2.viewtitle{font-family:var(--font-display);font-size:25px;margin:0 0 2px;font-weight:600;color:var(--soil);letter-spacing:.1px;}
+  .viewnote{color:var(--soil-2);font-size:13.5px;margin:0 0 20px;}
+
+  /* ---------- Stat cards (dashboard) ---------- */
+  .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:14px;margin-bottom:24px;}
+  .stat{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .stat::after{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--furrow);}
+  .stat .k{font-size:11px;text-transform:uppercase;letter-spacing:1.3px;color:var(--soil-2);font-weight:600;}
+  .stat .v{font-family:var(--font-mono);font-size:27px;font-weight:600;color:var(--field-deep);line-height:1.1;margin-top:7px;letter-spacing:-.5px;}
+  .stat .d{font-size:11.5px;color:var(--leaf);margin-top:3px;font-weight:600;}
+
+  .panelgrid{display:grid;grid-template-columns:1.4fr 1fr;gap:20px;}
+  .panelgrid2{display:grid;grid-template-columns:1fr 1fr;gap:20px;margin-top:20px;}
+  @media(max-width:860px){.panelgrid2{grid-template-columns:1fr;}}
+  .donut-wrap{display:flex;align-items:center;gap:18px;}
+  .donut-legend{list-style:none;margin:0;padding:0;font-size:12.5px;flex:1;}
+  .donut-legend li{display:flex;align-items:center;gap:8px;margin-bottom:7px;}
+  .donut-legend .sw{width:10px;height:10px;border-radius:3px;flex:none;}
+  .donut-legend .n{margin-left:auto;font-weight:700;color:var(--soil);}
+  .trendchart{width:100%;height:auto;}
+  .insight-card{background:linear-gradient(135deg,var(--field),var(--field-deep));border-radius:12px;padding:18px 20px;margin-bottom:20px;color:var(--cream);box-shadow:var(--shadow);position:relative;overflow:hidden;}
+  .insight-card::before{content:"";position:absolute;inset:0;background:var(--furrow);opacity:.05;pointer-events:none;}
+  .insight-card h3{margin:0 0 4px;font-family:var(--font-mono);font-size:12px;text-transform:uppercase;letter-spacing:1.5px;color:var(--wheat-soft);font-weight:600;}
+  .insight-card p.sub{margin:0 0 12px;font-size:12.5px;color:var(--wheat-soft);opacity:.9;}
+  .insight-body{display:none;margin-top:12px;background:rgba(255,255,255,.08);border-radius:9px;padding:14px 16px;font-size:13px;line-height:1.7;}
+  .insight-body .hl{margin-top:8px;padding-left:18px;}
+  .insight-body .hl li{margin-bottom:5px;}
+  th.sortable{cursor:pointer;user-select:none;}
+  th.sortable:hover{color:var(--soil);}
+  th.sortable .arrow{opacity:.55;margin-left:3px;}
+  .panel-box{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:18px 20px;box-shadow:var(--shadow);}
+  .panel-box h3{margin:0 0 14px;font-size:12.5px;text-transform:uppercase;letter-spacing:1.3px;color:var(--soil-2);font-weight:700;}
+  .bar{display:flex;align-items:center;gap:10px;margin-bottom:11px;font-size:13px;}
+  .bar .lab{width:120px;flex:none;color:var(--soil);font-weight:normal;text-transform:none;letter-spacing:0;font-size:13px;}
+  .bar .track{flex:1;height:9px;background:var(--cream-2);border-radius:99px;overflow:hidden;}
+  .bar .fill{height:100%;background:linear-gradient(90deg,var(--leaf),var(--field));border-radius:99px;}
+  .bar .num{width:30px;text-align:right;font-variant-numeric:tabular-nums;color:var(--soil-2);font-weight:600;}
+  .feed{list-style:none;margin:0;padding:0;}
+  .feed li{display:flex;gap:11px;padding:9px 0;border-bottom:1px dashed var(--line);font-size:13px;}
+  .feed li:last-child{border-bottom:0;}
+  .feed .ic{width:26px;height:26px;border-radius:7px;background:var(--cream-2);display:grid;place-items:center;font-size:14px;flex:none;}
+  .feed .who{font-weight:600;color:var(--soil);}
+  .feed .meta{color:var(--soil-2);font-size:12px;}
+
+  /* ---------- Toolbar / table (CRM) ---------- */
+  .toolbar{display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap;}
+  .toolbar input[type=search],.toolbar select{font:inherit;font-size:13px;padding:9px 12px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--soil);transition:border-color .12s;}
+  .toolbar input[type=search]:focus,.toolbar select:focus{border-color:var(--leaf);}
+  .toolbar input[type=search]{min-width:220px;}
+  .toolbar .spacer{flex:1;}
+  .btn{font:inherit;font-size:13px;font-weight:600;cursor:pointer;padding:9px 16px;border-radius:9px;border:1px solid transparent;}
+  .btn.primary{background:linear-gradient(180deg,var(--field) 0%,var(--field-deep) 100%);color:var(--cream);transition:transform .12s,box-shadow .12s,background .15s;box-shadow:0 1px 0 rgba(255,255,255,.08) inset;}
+  .btn.primary:hover{background:linear-gradient(180deg,#356b31 0%,var(--field-deep) 100%);transform:translateY(-1px);box-shadow:0 6px 14px -6px rgba(21,44,17,.5);}
+  .btn.primary:active{transform:translateY(0);}
+  .btn.primary:disabled{background:var(--cream-2);color:var(--soil-2);cursor:not-allowed;}
+  .btn.ghost{background:transparent;border-color:var(--line);color:var(--soil);transition:background .12s,border-color .12s;}
+  .btn.ghost:hover{background:var(--cream-2);border-color:var(--soil-2);}
+  .btn.tiny{padding:5px 10px;font-size:12px;}
+  .tablewrap{background:var(--paper);border:1px solid var(--line);border-radius:12px;overflow:hidden;box-shadow:var(--shadow);}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  thead th{text-align:left;background:var(--cream-2);color:var(--soil-2);font-size:11px;text-transform:uppercase;letter-spacing:1px;font-weight:700;padding:11px 14px;border-bottom:1px solid var(--line);}
+  tbody td{padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle;}
+  tbody tr:last-child td{border-bottom:0;}
+  tbody tr.clickable{cursor:pointer;}
+  tbody tr.clickable:hover{background:var(--cream);box-shadow:inset 3px 0 0 var(--leaf);}
+  tbody tr.clickable{transition:background .12s,box-shadow .12s;}
+  .who-cell{display:flex;align-items:center;gap:10px;}
+  .avatar{width:30px;height:30px;border-radius:50%;flex:none;display:grid;place-items:center;font-family:var(--font-mono);font-size:11.5px;font-weight:600;color:#fff;background:var(--leaf);}
+  .muted{color:var(--soil-2);}
+  .empty{padding:40px;text-align:center;color:var(--soil-2);font-style:italic;}
+  .pill{display:inline-block;padding:3px 10px;border-radius:99px;font-family:var(--font-mono);font-size:10.5px;font-weight:600;letter-spacing:.4px;}
+  .pill.new{background:#eef6e9;color:var(--field);}
+  .pill.active{background:#fdf3d6;color:#8a6d12;}
+  .pill.lead{background:#f7e3d8;color:var(--rust);}
+  .pill.dormant{background:#ececec;color:#777;}
+  .tool-tag{display:inline-block;padding:3px 9px;border-radius:6px;font-family:var(--font-mono);font-size:10.5px;font-weight:600;background:var(--cream-2);color:var(--soil-2);}
+  .ai-badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;letter-spacing:.3px;background:var(--field);color:var(--cream);margin-left:6px;vertical-align:middle;}
+
+  /* ---------- Drawer ---------- */
+  .scrim{position:fixed;inset:0;background:rgba(43,36,23,.45);opacity:0;pointer-events:none;transition:opacity .2s;z-index:40;}
+  .scrim.show{opacity:1;pointer-events:auto;}
+  .drawer{position:fixed;top:0;right:0;height:100%;width:min(520px,94vw);background:var(--cream);box-shadow:-12px 0 40px -10px rgba(0,0,0,.4);transform:translateX(100%);transition:transform .26s cubic-bezier(.4,0,.2,1);z-index:50;display:flex;flex-direction:column;}
+  .drawer.show{transform:none;}
+  .drawer .dhead{background:linear-gradient(180deg,var(--field),var(--field-deep));color:var(--cream);padding:22px 24px;position:relative;}
+  .drawer .dhead .x{position:absolute;top:16px;right:18px;background:rgba(255,255,255,.12);border:0;color:#fff;width:30px;height:30px;border-radius:8px;cursor:pointer;font-size:16px;}
+  .drawer .dhead h3{margin:0;font-family:var(--font-display);font-size:22px;font-weight:600;}
+  .drawer .dhead .farm{font-size:13px;color:var(--wheat-soft);margin-top:3px;}
+  .dbody{padding:22px 24px;overflow-y:auto;flex:1;}
+  .kv{display:grid;grid-template-columns:130px 1fr;gap:6px 14px;font-size:13px;margin-bottom:18px;}
+  .kv dt{color:var(--soil-2);font-weight:600;}
+  .kv dd{margin:0;color:var(--soil);}
+  .dbody h4{font-size:12px;text-transform:uppercase;letter-spacing:1.2px;color:var(--leaf);margin:20px 0 10px;border-top:1px solid var(--line);padding-top:14px;}
+  .timeline{list-style:none;margin:0;padding:0;}
+  .timeline li{position:relative;padding:0 0 15px 22px;border-left:2px solid var(--line);}
+  .timeline li:last-child{border-left-color:transparent;padding-bottom:0;}
+  .timeline .dot{position:absolute;left:-7px;top:2px;width:12px;height:12px;border-radius:50%;background:var(--wheat);border:2px solid var(--cream);}
+  .timeline .t-tool{font-weight:700;font-size:12.5px;color:var(--soil);}
+  .timeline .t-date{font-size:11.5px;color:var(--soil-2);}
+  .timeline .t-detail{font-size:12.5px;color:var(--soil-2);margin-top:3px;line-height:1.5;}
+
+  /* ---------- Modal form ---------- */
+  .modal{position:fixed;inset:0;display:none;place-items:center;z-index:60;padding:16px;}
+  .modal.show{display:grid;}
+  .modal .card{background:var(--cream);border-radius:14px;width:min(560px,94vw);max-height:90vh;overflow-y:auto;box-shadow:0 30px 80px -20px rgba(0,0,0,.55);border:1px solid var(--line);}
+  .modal .mhead{padding:18px 22px;border-bottom:1px solid var(--line);display:flex;align-items:center;}
+  .modal .mhead h3{margin:0;font-family:var(--font-display);font-size:19px;font-weight:600;}
+  .modal .mhead button{margin-left:auto;background:none;border:0;font-size:20px;cursor:pointer;color:var(--soil-2);}
+  .mbody{padding:20px 22px;}
+  .mfoot{padding:16px 22px;border-top:1px solid var(--line);display:flex;gap:10px;justify-content:flex-end;}
+  .field{margin-bottom:13px;}
+  .field label{display:block;font-size:11.5px;font-weight:600;color:var(--soil-2);margin-bottom:5px;text-transform:uppercase;letter-spacing:.5px;}
+  .field input,.field select,.field textarea{width:100%;font:inherit;font-size:13.5px;padding:9px 11px;border:1px solid var(--line);border-radius:9px;background:var(--paper);color:var(--soil);transition:border-color .12s,box-shadow .12s;}
+  .field input:focus,.field select:focus,.field textarea:focus{border-color:var(--leaf);box-shadow:0 0 0 3px rgba(79,138,61,.13);}
+  .field textarea{resize:vertical;min-height:64px;}
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:12px;}
+  @media(max-width:520px){.row2{grid-template-columns:1fr;}}
+
+  /* ---------- Copilot: home + tool grid ---------- */
+  .home-hero{background:linear-gradient(135deg,var(--field),var(--field-deep));border-radius:14px;padding:26px 24px;margin-bottom:18px;position:relative;overflow:hidden;color:var(--cream);}
+  .home-hero::before{content:"";position:absolute;inset:0;background:var(--furrow);opacity:.06;pointer-events:none;}
+  .home-hero::before{content:'';position:absolute;right:-30px;top:-30px;width:220px;height:220px;background:rgba(255,255,255,.06);border-radius:50%;}
+  .home-hero-tag{display:inline-block;background:var(--wheat);color:var(--field-deep);font-family:var(--font-mono);font-size:10.5px;font-weight:600;padding:4px 11px;border-radius:20px;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;}
+  .home-hero-title{font-family:var(--font-display);font-size:27px;font-weight:600;line-height:1.28;margin-bottom:7px;position:relative;letter-spacing:.1px;}
+  .home-hero-desc{font-size:13px;color:var(--wheat-soft);line-height:1.6;position:relative;max-width:560px;}
+  .tool-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;}
+  @media(max-width:700px){.tool-grid{grid-template-columns:1fr 1fr;}}
+  .tool-card{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:16px;cursor:pointer;transition:all .15s;display:flex;flex-direction:column;gap:7px;box-shadow:var(--shadow);}
+  .tool-card:hover{border-color:var(--leaf);background:var(--cream-2);transform:translateY(-2px);box-shadow:var(--shadow-lift);}
+  .tool-card{transition:transform .15s,box-shadow .15s,border-color .15s,background .15s;}
+  .tool-icon{font-size:21px;line-height:1;}
+  .tool-name{font-size:13px;font-weight:700;color:var(--soil);line-height:1.3;}
+  .tool-desc{font-size:11.5px;color:var(--soil-2);line-height:1.5;}
+  .tool-arrow{font-size:11.5px;color:var(--leaf);margin-top:auto;font-weight:600;}
+
+  /* ---------- Copilot: tool cards / forms ---------- */
+  .toolcard{background:var(--paper);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:16px;box-shadow:var(--shadow);}
+  .toolcard-header{display:flex;align-items:center;gap:10px;margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--line);}
+  .toolcard-icon{width:38px;height:38px;border-radius:8px;background:var(--cream-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;font-size:18px;flex-shrink:0;}
+  .toolcard-title{font-family:var(--font-display);font-size:18px;font-weight:600;color:var(--soil);}
+  .toolcard-sub{font-size:12px;color:var(--soil-2);margin-top:2px;}
+  .field-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;}
+  @media(max-width:500px){.field-grid{grid-template-columns:1fr;}}
+
+  .symptom-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px;}
+  @media(max-width:500px){.symptom-grid{grid-template-columns:1fr 1fr;}}
+  .symptom-btn{padding:8px 10px;border:1.5px solid var(--line);border-radius:8px;background:var(--paper);cursor:pointer;font-size:12px;color:var(--soil-2);text-align:center;transition:all .15s;line-height:1.3;}
+  .symptom-btn:hover{border-color:var(--leaf);background:var(--cream-2);}
+  .symptom-btn.selected{border-color:var(--field);background:var(--cream-2);color:var(--field-deep);font-weight:700;}
+  .symptom-icon{font-size:17px;display:block;margin-bottom:4px;}
+
+  .result-box{background:var(--cream-2);border:1px solid var(--line);border-radius:10px;padding:16px 18px;margin-top:14px;display:none;}
+  .result-print-btn{display:block;margin:14px 0 0 auto;}
+  .result-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:14px;}
+  .result-actions .btn{margin:0;}
+  .mic-btn.listening{background:var(--rust);color:#fff;border-color:var(--rust);}
+  .result-tag{display:inline-block;background:var(--field);color:var(--cream);font-size:10px;font-weight:700;padding:3px 9px;border-radius:20px;margin-bottom:10px;text-transform:uppercase;letter-spacing:.5px;}
+  .result-text{font-size:13px;color:var(--soil);line-height:1.85;}
+  .result-text p{margin-bottom:8px;}
+  .result-text p:last-child{margin-bottom:0;}
+  .crop-pick{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--leaf);border-radius:8px;padding:11px 13px;margin-bottom:9px;}
+  .crop-pick:last-child{margin-bottom:0;}
+  .crop-pick .cp-name{font-weight:700;font-size:13.5px;color:var(--field-deep);}
+  .crop-pick .cp-margin{float:right;font-size:11.5px;font-weight:700;color:var(--leaf);}
+  .crop-pick .cp-why{font-size:12.5px;color:var(--soil-2);margin-top:4px;line-height:1.55;}
+
+  .stat-row{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0;}
+  @media(max-width:500px){.stat-row{grid-template-columns:1fr 1fr;}}
+  .stat-card{background:var(--paper);border:1px solid var(--line);border-radius:9px;padding:12px;text-align:center;}
+  .stat-val{font-family:var(--font-mono);font-size:19px;font-weight:600;color:var(--soil);line-height:1;}
+  .stat-val.positive{color:var(--field);}
+  .stat-val.negative{color:var(--rust);}
+  .stat-lbl{font-size:11px;color:var(--soil-2);margin-top:4px;}
+  .cost-table{width:100%;border-collapse:collapse;font-size:13px;margin:10px 0;}
+  .cost-table tr{border-bottom:1px solid var(--line);}
+  .cost-table tr:last-child{border-bottom:none;}
+  .cost-table td{padding:7px 0;color:var(--soil-2);}
+  .cost-table td:last-child{text-align:right;font-family:var(--font-mono);font-weight:600;color:var(--soil);}
+  .tip-box{background:var(--cream);border:1px solid var(--line);border-left:4px solid var(--leaf);border-radius:8px;padding:12px 14px;margin-top:10px;}
+  .tip-label{font-size:11px;font-weight:700;color:var(--field);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+  .tip-text{font-size:13px;color:var(--soil);line-height:1.6;}
+  .warn-box{background:var(--rust-bg);border:1px solid #eeccb8;border-left:4px solid var(--rust);border-radius:8px;padding:12px 14px;margin-top:10px;}
+  .warn-label{font-size:11px;font-weight:700;color:var(--rust);text-transform:uppercase;letter-spacing:.4px;margin-bottom:4px;}
+  .err-box{background:var(--rust-bg);border:1px solid #eeccb8;border-radius:8px;padding:13px 15px;margin-top:14px;font-size:13px;color:var(--rust);display:none;}
+
+  .loading{display:flex;align-items:center;gap:10px;padding:6px 0;}
+  .refine-badge{display:flex;align-items:center;gap:8px;background:var(--sky-bg);color:var(--sky);border-radius:7px;padding:6px 10px;font-size:11.5px;font-weight:600;margin-bottom:10px;}
+  .refine-badge .dotpulse{background:var(--sky);}
+  .dotpulse{width:7px;height:7px;border-radius:50%;background:var(--leaf);display:inline-block;animation:blink 1.2s infinite;}
+  .dotpulse:nth-child(2){animation-delay:.2s;}
+  .dotpulse:nth-child(3){animation-delay:.4s;}
+  @keyframes blink{0%,80%,100%{opacity:.2;}40%{opacity:1;}}
+  .loading-text{font-size:13px;color:var(--soil-2);}
+
+  .diary-entry{background:var(--paper);border:1px solid var(--line);border-left:4px solid var(--leaf);border-radius:8px;padding:12px 14px;margin-bottom:10px;}
+  .diary-meta{display:flex;align-items:center;gap:6px;margin-bottom:5px;flex-wrap:wrap;}
+  .diary-date{font-size:11px;color:var(--soil-2);font-weight:500;}
+  .tag{display:inline-block;font-family:var(--font-mono);font-size:9.5px;font-weight:600;padding:2px 8px;border-radius:20px;text-transform:uppercase;letter-spacing:.4px;}
+  .tag-green{background:#e5efdd;color:var(--field-deep);}
+  .tag-yellow{background:var(--wheat-soft);color:#7a5c0e;}
+  .tag-blue{background:var(--sky-bg);color:var(--sky);}
+
+  .footer{max-width:1180px;margin:0 auto;padding:18px 26px 40px;color:var(--soil-2);font-size:11.5px;border-top:1px solid var(--line);display:flex;gap:14px;flex-wrap:wrap;align-items:center;}
+  .login-wrap{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:40px 20px;background:radial-gradient(1200px 500px at 50% -10%, rgba(220,170,47,.16), transparent 60%), var(--cream);}
+  .login-shell{display:grid;grid-template-columns:0.85fr 1.15fr;max-width:920px;width:100%;background:var(--paper);border-radius:18px;overflow:hidden;box-shadow:var(--shadow-lift);border:1px solid var(--line);}
+  @media(max-width:760px){.login-shell{grid-template-columns:1fr;max-width:460px;}}
+
+  .login-hero{background:linear-gradient(160deg,var(--field) 0%,var(--field-deep) 100%);color:var(--cream);padding:44px 38px 0;position:relative;display:flex;flex-direction:column;justify-content:space-between;min-height:100%;overflow:hidden;}
+  .login-hero::after{content:"";position:absolute;right:-60px;top:-60px;width:260px;height:260px;border-radius:50%;background:radial-gradient(circle, rgba(255,255,255,.08), transparent 70%);pointer-events:none;}
+  .login-rows{position:absolute;left:0;right:0;bottom:8px;height:120px;pointer-events:none;opacity:.9;}
+  .login-hero-inner{position:relative;z-index:1;padding-bottom:34px;}
+  .login-hero::before{content:"";position:absolute;inset:0;background:var(--furrow);opacity:.07;pointer-events:none;}
+  .login-hero-furrow{height:8px;background:var(--furrow);opacity:.9;}
+  .login-brand{display:flex;align-items:center;gap:12px;margin-bottom:18px;}
+  .login-brand .sprout{width:42px;height:42px;border-radius:10px;background:var(--wheat);display:grid;place-items:center;font-size:22px;flex:none;box-shadow:inset 0 -3px 0 rgba(0,0,0,.14);}
+  .login-brand h1{font-family:var(--font-display);font-size:27px;color:var(--cream);margin:0;font-weight:600;}
+  .login-tag{font-family:var(--font-display);font-size:19px;line-height:1.4;color:var(--wheat-soft);margin:0 0 30px;font-weight:500;}
+  .login-features{list-style:none;margin:0;padding:0;}
+  .login-features li{display:flex;align-items:flex-start;gap:12px;margin-bottom:16px;font-size:13px;color:var(--cream);line-height:1.5;opacity:.95;}
+  .lf-ic{width:32px;height:32px;border-radius:9px;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.18);display:grid;place-items:center;font-size:15px;flex:none;}
+
+  .login-form-panel{padding:40px 38px;}
+  .login-tabs{display:flex;gap:4px;background:var(--cream-2);padding:4px;border-radius:10px;margin-bottom:26px;}
+  .login-tab{flex:1;font:inherit;font-size:12.5px;font-weight:700;padding:9px 10px;border:0;border-radius:8px;background:transparent;color:var(--soil-2);cursor:pointer;transition:background .15s,color .15s;}
+  .login-tab.active{background:var(--paper);color:var(--field-deep);box-shadow:var(--shadow);}
+  .login-pane{display:none;}
+  .login-pane.active{display:block;animation:fade .2s ease;}
+  .login-staff{text-align:center;margin-top:26px;padding-top:20px;border-top:1px solid var(--line);}
+  .login-error{color:var(--rust);font-size:12px;font-weight:600;margin:-6px 0 12px;min-height:0;}
+  .login-error:empty{display:none;}
+  .login-demo-hint{font-size:11.5px;color:var(--soil-2);text-align:center;margin-top:12px;}
+  .login-demo-hint code{background:var(--cream-2);padding:2px 6px;border-radius:5px;font-family:var(--font-mono);color:var(--field-deep);}
+  .login-staff a{color:var(--sky);font-size:12.5px;font-weight:600;text-decoration:none;}
+  .login-staff a:hover{text-decoration:underline;}
+  @media(max-width:760px){.login-hero{padding:34px 28px 0;}.login-form-panel{padding:32px 28px;}}
+  .fc-toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(20px);background:var(--field-deep);color:var(--cream);padding:11px 20px;border-radius:9px;font-size:13px;font-weight:600;box-shadow:var(--shadow-lift);opacity:0;pointer-events:none;transition:opacity .2s,transform .2s;z-index:100;}
+  .fc-toast.show{opacity:1;transform:translateX(-50%) translateY(0);}
+  .footer .seed{margin-left:auto;background:none;border:1px solid var(--line);border-radius:7px;padding:5px 11px;font:inherit;font-size:11px;cursor:pointer;color:var(--soil-2);}
+
+  @media(max-width:860px){
+    .stats{grid-template-columns:repeat(2,1fr);}
+    .panelgrid{grid-template-columns:1fr;}
+  }
+
+  #print-area{display:none;}
+  @media print{
+    body *{visibility:hidden;}
+    #print-area, #print-area *{visibility:visible;}
+    #print-area{display:block;position:absolute;left:0;top:0;width:100%;padding:0;}
+    .pr-header{border-bottom:2px solid #16330f;padding-bottom:12px;margin-bottom:18px;}
+    .pr-header .pr-brand{font-family:Georgia,serif;font-size:20px;font-weight:700;color:#16330f;}
+    .pr-header .pr-meta{font-size:11px;color:#666;margin-top:2px;}
+    .pr-title{font-family:Georgia,serif;font-size:16px;font-weight:700;margin:18px 0 8px;color:#16330f;}
+    .pr-kv{width:100%;border-collapse:collapse;margin-bottom:14px;font-size:11.5px;}
+    .pr-kv td{padding:4px 8px;border-bottom:1px solid #ddd;}
+    .pr-kv td:first-child{font-weight:700;color:#444;width:160px;}
+    .pr-table{width:100%;border-collapse:collapse;font-size:11px;margin-bottom:14px;}
+    .pr-table th{background:#2c5a29;color:#fff;text-align:left;padding:6px 8px;}
+    .pr-table td{padding:6px 8px;border-bottom:1px solid #ddd;vertical-align:top;}
+    .pr-table tr:nth-child(even){background:#f7f3e8;}
+    .pr-footer{margin-top:20px;font-size:10px;color:#888;border-top:1px solid #ddd;padding-top:8px;}
+  }
+</style>
+<script>
+(function(){
+  const MODEL = "claude-sonnet-4-6";
+  const KEY = "agronome_unified_v1";
+  const SESSION_KEY = "agronome_session_v1";
+  const STAFF_PASSCODE = "fieldoffice2026";
+
+  const TOOLS = {
+    crop:      {label:"Crop Advisor",     icon:"🌱"},
+    fertilizer:{label:"Fertilizer Plan",  icon:"🪣"},
+    profit:    {label:"Profit Forecast",  icon:"💰"},
+    disease:   {label:"Disease Check",    icon:"🔍"},
+    weather:   {label:"Weather Advice",   icon:"🌤"},
+    diary:     {label:"Farm Diary",       icon:"📓"}
+  };
+  const LANGUAGES = ["English","Hindi","Swahili","Portuguese","Spanish","French","Bengali","Tamil","Telugu"];
+  const STATUS = {
+    new:    {label:"New",    cls:"new"},
+    active: {label:"Active", cls:"active"},
+    lead:   {label:"Qualified lead", cls:"lead"},
+    dormant:{label:"Dormant",cls:"dormant"}
+  };
+
+  let DB = {farmers:[], interactions:[]};
+  let currentFarmerId = null;
+  let session = null; // null | {type:'farmer', farmerId} | {type:'staff', staffName}
+  let theme = "light";
+  let language = "English";
+  let selectedSym = "";
+  let farmersSort = {field:"name", dir:1};
+  let logSort = {field:"date", dir:-1};
+
+  /* ---------- storage ---------- */
+  async function load(){
+    try{
+      const r = await window.storage.get(KEY, false);
+      if(r && r.value){ DB = JSON.parse(r.value); return; }
+    }catch(e){ /* not set yet */ }
+    DB = seed();
+    await save();
+  }
+  async function save(){
+    try{ await window.storage.set(KEY, JSON.stringify(DB), false); }
+    catch(e){ console.error("save failed", e); }
+  }
+  async function loadSession(){
+    try{
+      const r = await window.storage.get(SESSION_KEY, false);
+      if(r && r.value) session = JSON.parse(r.value);
+    }catch(e){ session = null; }
+  }
+  async function saveSession(){
+    try{
+      if(session) await window.storage.set(SESSION_KEY, JSON.stringify(session), false);
+      else await window.storage.delete(SESSION_KEY, false);
+    }catch(e){ console.error("session save failed", e); }
+  }
+  const PREFS_KEY = "agronome_prefs_v1";
+  async function loadPrefs(){
+    try{
+      const r = await window.storage.get(PREFS_KEY, false);
+      if(r && r.value){ const p = JSON.parse(r.value); theme = p.theme || "light"; language = p.language || "English"; }
+    }catch(e){ /* defaults stand */ }
+  }
+  async function savePrefs(){
+    try{ await window.storage.set(PREFS_KEY, JSON.stringify({theme, language}), false); }
+    catch(e){ console.error("prefs save failed", e); }
+  }
+  function applyTheme(){
+    const app = document.getElementById("app");
+    if(app) app.classList.toggle("dark", theme === "dark");
+  }
+  async function toggleTheme(){
+    theme = theme === "dark" ? "light" : "dark";
+    applyTheme();
+    const lab = document.getElementById("theme-label");
+    if(lab) lab.textContent = theme === "dark" ? "Light mode" : "Dark mode";
+    const ic = document.getElementById("theme-icon");
+    if(ic) ic.textContent = theme === "dark" ? "\u2600\uFE0F" : "\uD83C\uDF19";
+    await savePrefs();
+  }
+  async function setLanguage(lang){
+    language = lang;
+    await savePrefs();
+  }
+  const LANG_CODES = {English:"en-US", Hindi:"hi-IN", Swahili:"sw-KE", Portuguese:"pt-BR", Spanish:"es-ES", French:"fr-FR", Bengali:"bn-IN", Tamil:"ta-IN", Telugu:"te-IN"};
+  function shareResult(elId, title){
+    const el = $("#"+elId);
+    if(!el) return;
+    const text = el.textContent.trim().slice(0, 1500);
+    if(!text){ alert("There's nothing here to share yet."); return; }
+    const shareText = "Agronome - " + title + "\n\n" + text;
+    if(navigator.share){
+      navigator.share({ title: "Agronome - "+title, text: shareText }).catch(()=>{});
+      return;
+    }
+    const url = "https://wa.me/?text=" + encodeURIComponent(shareText);
+    window.open(url, "_blank");
+  }
+  function readAloud(elId){
+    const el = $("#"+elId);
+    if(!el) return;
+    if(!("speechSynthesis" in window)){ alert("Voice playback is not supported in this browser."); return; }
+    window.speechSynthesis.cancel();
+    const text = el.textContent.trim();
+    if(!text){ alert("There's nothing here to read yet."); return; }
+    const utter = new SpeechSynthesisUtterance(text);
+    utter.lang = LANG_CODES[language] || "en-US";
+    utter.rate = 0.95;
+    window.speechSynthesis.speak(utter);
+  }
+  let recognizer = null;
+  function toggleVoiceInput(targetId, btnId){
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    if(!SR){ alert("Voice input is not supported in this browser. Please type instead."); return; }
+    const btn = $("#"+btnId);
+    if(recognizer){ recognizer.stop(); recognizer = null; if(btn) btn.classList.remove("listening"); return; }
+    recognizer = new SR();
+    recognizer.lang = LANG_CODES[language] || "en-US";
+    recognizer.interimResults = false;
+    recognizer.maxAlternatives = 1;
+    if(btn) btn.classList.add("listening");
+    recognizer.onresult = (e) => {
+      const text = e.results[0][0].transcript;
+      const target = $("#"+targetId);
+      if(target) target.value = (target.value ? target.value + " " : "") + text;
+    };
+    recognizer.onerror = () => { if(btn) btn.classList.remove("listening"); recognizer = null; };
+    recognizer.onend = () => { if(btn) btn.classList.remove("listening"); recognizer = null; };
+    recognizer.start();
+  }
+
+  /* ---------- seed sample data ---------- */
+  function seed(){
+    const farmers = [
+      {id:"F-1042",name:"Ravi Kumar",region:"North India (Punjab, Haryana, UP)",crop:"Wheat",size:"3 acres",soil:"Loamy soil (dark, soft and fertile)",water:"Good borewell - reliable supply",phone:"+91 98xxxxxx12",status:"lead",joined:"2026-02-12"},
+      {id:"F-1043",name:"Sunita Devi",region:"East India (West Bengal, Bihar)",crop:"Rice / paddy",size:"2 acres",soil:"Clay soil (hard and sticky when wet)",water:"Canal or river irrigation",phone:"+91 97xxxxxx88",status:"active",joined:"2026-02-18"},
+      {id:"F-1044",name:"Mahesh Patil",region:"West India (Maharashtra, Gujarat)",crop:"Cotton",size:"5 acres",soil:"Black cotton soil (vertisol, cracks when dry)",water:"Drip irrigation system installed",phone:"+91 90xxxxxx41",status:"active",joined:"2026-03-01"},
+      {id:"F-1045",name:"Grace Wanjiru",region:"East Africa (Kenya, Tanzania, Uganda)",crop:"Corn / maize",size:"4 acres",soil:"Red laterite soil (reddish, slightly acidic)",water:"Rain only - no irrigation",phone:"+254 7xxxxxx33",status:"active",joined:"2026-03-10"},
+      {id:"F-1046",name:"Tom Reynolds",region:"US Midwest (Iowa, Illinois, Indiana)",crop:"Soybean",size:"100 acres",soil:"Loamy soil (dark, soft and fertile)",water:"Rain only - no irrigation",phone:"+1 319-xxx-2210",status:"lead",joined:"2026-01-30"},
+      {id:"F-1047",name:"Lakshmi Rao",region:"South India (Karnataka, AP, Tamil Nadu)",crop:"Tomato",size:"2 acres",soil:"Sandy soil (loose, drains very fast)",water:"Limited borewell - not always available",phone:"+91 99xxxxxx05",status:"dormant",joined:"2026-01-15"},
+      {id:"F-1048",name:"Carlos Silva",region:"Brazil (Mato Grosso, Parana)",crop:"Corn / maize",size:"25 acres",soil:"Loamy soil (dark, soft and fertile)",water:"Drip irrigation system installed",phone:"+55 11 9xxxx-2201",status:"active",joined:"2026-02-05"},
+      {id:"F-1049",name:"Amara Okafor",region:"West Africa (Nigeria, Ghana)",crop:"Cassava",size:"3 acres",soil:"Sandy soil (loose, drains very fast)",water:"Rain only - no irrigation",phone:"+234 80xxxxxx14",status:"new",joined:"2026-06-25"},
+      {id:"F-1050",name:"James Whitfield",region:"UK and Ireland",crop:"Potato",size:"40 acres",soil:"Silty soil (smooth silky feel)",water:"Canal or river irrigation",phone:"+44 7700 9xxxxx",status:"lead",joined:"2026-03-08"},
+      {id:"F-1051",name:"Nguyen Thi Lan",region:"Southeast Asia (Vietnam, Thailand, Philippines)",crop:"Rice / paddy",size:"1.5 acres",soil:"Clay soil (hard and sticky when wet)",water:"Canal or river irrigation",phone:"+84 90xxxxxx77",status:"active",joined:"2026-02-18"},
+      {id:"F-1052",name:"Emily Carter",region:"Australia (Queensland, NSW)",crop:"Cotton",size:"60 acres",soil:"Black cotton soil (vertisol, cracks when dry)",water:"Drip irrigation system installed",phone:"+61 4xx xxx 220",status:"lead",joined:"2026-04-02"},
+      {id:"F-1053",name:"Abebe Bekele",region:"East Africa (Kenya, Tanzania, Uganda)",crop:"Sorghum",size:"6 acres",soil:"Red laterite soil (reddish, slightly acidic)",water:"Rain only - no irrigation",phone:"+251 9xxxxxxxx",status:"dormant",joined:"2026-01-10"}
+    ];
+    const ix = [
+      {farmerId:"F-1042",tool:"crop",date:"2026-02-12",detail:"Recommended: Wheat, Mustard, Chickpea for loamy soil + borewell, medium budget.",quality:5},
+      {farmerId:"F-1042",tool:"fertilizer",date:"2026-02-14",detail:"Fertilizer plan generated: Urea + DAP week-by-week schedule for wheat, 3 acres.",quality:5},
+      {farmerId:"F-1042",tool:"diary",date:"2026-03-02",detail:"Logged: applied fertilizer - wheat. Soil was dry, watered lightly after.",quality:null},
+      {farmerId:"F-1042",tool:"profit",date:"2026-03-28",detail:"Profit forecast: est. net profit on wheat at current local prices.",quality:4},
+      {farmerId:"F-1042",tool:"disease",date:"2026-05-04",detail:"Diagnosis: brown rust spotted early - fungicide + resistant variety advice given.",quality:5},
+      {farmerId:"F-1042",tool:"weather",date:"2026-06-21",detail:"Weather advice: delay irrigation - rain expected within 48h.",quality:5},
+      {farmerId:"F-1043",tool:"crop",date:"2026-02-18",detail:"Recommended: Paddy confirmed best for clay soil + canal irrigation, Kharif season.",quality:4},
+      {farmerId:"F-1043",tool:"fertilizer",date:"2026-03-05",detail:"Fertilizer plan generated: Urea + SSP schedule for rice, 2 acres.",quality:4},
+      {farmerId:"F-1043",tool:"disease",date:"2026-04-02",detail:"Diagnosis: yellow leaves - nitrogen deficiency; corrective top-dress advised.",quality:5},
+      {farmerId:"F-1043",tool:"diary",date:"2026-05-22",detail:"Logged: irrigated 3h via borewell; crop healthy, no pests.",quality:null},
+      {farmerId:"F-1043",tool:"weather",date:"2026-06-22",detail:"Weather advice: rainy day - hold off on any spraying for 24 hours.",quality:4},
+      {farmerId:"F-1044",tool:"crop",date:"2026-03-01",detail:"Recommended: Cotton confirmed best fit for black cotton soil under drip.",quality:5},
+      {farmerId:"F-1044",tool:"fertilizer",date:"2026-03-21",detail:"Fertilizer plan generated: cotton schedule for black cotton soil under drip.",quality:5},
+      {farmerId:"F-1044",tool:"disease",date:"2026-04-10",detail:"Diagnosis: aphids - sticky residue + small insects; neem spray protocol given.",quality:4},
+      {farmerId:"F-1044",tool:"diary",date:"2026-05-02",detail:"Logged: sprayed pesticide - cotton. Insects noticeably reduced after 3 days.",quality:null},
+      {farmerId:"F-1044",tool:"weather",date:"2026-06-25",detail:"Weather advice: hot & dry - early-morning irrigation window recommended.",quality:5},
+      {farmerId:"F-1044",tool:"profit",date:"2026-06-28",detail:"Profit forecast: cotton on 5 acres, flagged pest-cost risk to margin.",quality:4},
+      {farmerId:"F-1045",tool:"crop",date:"2026-03-10",detail:"Recommended: Maize, Beans, Sorghum for rain-fed red laterite soil.",quality:4},
+      {farmerId:"F-1045",tool:"fertilizer",date:"2026-03-30",detail:"Fertilizer plan generated: DAP + top-dress Urea plan for maize on laterite soil.",quality:4},
+      {farmerId:"F-1045",tool:"weather",date:"2026-05-14",detail:"Weather advice: dry spell warning - irrigate early morning if possible.",quality:3},
+      {farmerId:"F-1045",tool:"disease",date:"2026-06-18",detail:"Diagnosis: fall armyworm suspected from holes in leaves; treatment plan given.",quality:5},
+      {farmerId:"F-1046",tool:"crop",date:"2026-01-30",detail:"Recommended: Soybean vs corn rotation comparison for Iowa loam.",quality:5},
+      {farmerId:"F-1046",tool:"profit",date:"2026-02-02",detail:"Profit forecast: soybean across 100 acres; flagged input-cost sensitivity.",quality:5},
+      {farmerId:"F-1046",tool:"weather",date:"2026-04-18",detail:"Weather advice: spray window ahead of forecast wind.",quality:4},
+      {farmerId:"F-1046",tool:"fertilizer",date:"2026-05-06",detail:"Fertilizer plan generated: low-nitrogen DAP + MOP schedule for soybean.",quality:5},
+      {farmerId:"F-1046",tool:"diary",date:"2026-06-11",detail:"Logged: soil testing done - soybean. Results pending lab confirmation.",quality:null},
+      {farmerId:"F-1047",tool:"crop",date:"2026-01-15",detail:"Recommended: Tomato confirmed for sandy soil + borewell, summer season.",quality:3},
+      {farmerId:"F-1047",tool:"fertilizer",date:"2026-01-20",detail:"Fertilizer plan generated: tomato feeding plan; cautioned against over-application.",quality:4},
+      {farmerId:"F-1047",tool:"disease",date:"2026-02-08",detail:"Diagnosis: early blight suspected from brown leaf spots; copper spray advised.",quality:3},
+      {farmerId:"F-1048",tool:"crop",date:"2026-02-05",detail:"Recommended: Corn confirmed strong fit for Mato Grosso loam + drip irrigation.",quality:5},
+      {farmerId:"F-1048",tool:"profit",date:"2026-02-20",detail:"Profit forecast: corn on 25 acres, strong export market pricing noted.",quality:5},
+      {farmerId:"F-1048",tool:"fertilizer",date:"2026-03-15",detail:"Fertilizer plan generated: NPK 10-26-26 + Urea schedule for corn.",quality:4},
+      {farmerId:"F-1048",tool:"weather",date:"2026-05-30",detail:"Weather advice: windy and dry - delayed spraying recommended.",quality:4},
+      {farmerId:"F-1049",tool:"crop",date:"2026-06-25",detail:"Recommended: Cassava, groundnut, sweet potato for sandy rain-fed soil.",quality:4},
+      {farmerId:"F-1050",tool:"crop",date:"2026-03-08",detail:"Recommended: Potato confirmed strong fit for silty soil + canal irrigation.",quality:5},
+      {farmerId:"F-1050",tool:"fertilizer",date:"2026-03-25",detail:"Fertilizer plan generated: NPK 12-32-16 + Urea schedule for potato.",quality:5},
+      {farmerId:"F-1050",tool:"profit",date:"2026-04-14",detail:"Profit forecast: potato on 40 acres; noted strong supermarket contract pricing.",quality:4},
+      {farmerId:"F-1050",tool:"disease",date:"2026-05-20",detail:"Diagnosis: late blight risk flagged from wet leaf curling; preventive spray advised.",quality:5},
+      {farmerId:"F-1051",tool:"crop",date:"2026-02-18",detail:"Recommended: Paddy rice confirmed for clay soil + canal irrigation, wet season.",quality:4},
+      {farmerId:"F-1051",tool:"fertilizer",date:"2026-03-04",detail:"Fertilizer plan generated: Urea + SSP schedule for rice, 1.5 acres.",quality:4},
+      {farmerId:"F-1051",tool:"diary",date:"2026-04-20",detail:"Logged: irrigated the farm - rice. Good rain fell today too.",quality:null},
+      {farmerId:"F-1051",tool:"weather",date:"2026-06-10",detail:"Weather advice: rainy - check drainage channels, hold pesticide spraying.",quality:5},
+      {farmerId:"F-1052",tool:"crop",date:"2026-04-02",detail:"Recommended: Cotton confirmed for black cotton soil + drip irrigation, Queensland.",quality:5},
+      {farmerId:"F-1052",tool:"profit",date:"2026-04-22",detail:"Profit forecast: cotton on 60 acres; flagged water-cost sensitivity as key risk.",quality:4},
+      {farmerId:"F-1052",tool:"fertilizer",date:"2026-05-10",detail:"Fertilizer plan generated: Urea + DAP + MOP schedule for cotton.",quality:4},
+      {farmerId:"F-1053",tool:"crop",date:"2026-01-10",detail:"Recommended: Sorghum, millet, groundnut for rain-fed red laterite soil.",quality:3},
+      {farmerId:"F-1053",tool:"weather",date:"2026-01-25",detail:"Weather advice: dry spell - prioritise early morning irrigation if any water available.",quality:3}
+    ].map((r,i)=>({id:"IX-"+(2000+i), ...r}));
+    return {farmers, interactions: ix};
+  }
+
+  /* ---------- generic helpers ---------- */
+  const $  = (s,r=document)=>r.querySelector(s);
+  const $$ = (s,r=document)=>Array.from(r.querySelectorAll(s));
+  const esc = s => String(s==null?"":s).replace(/[&<>"]/g, c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+  function setHTML(id, html){ const el = $("#"+id); if(el) el.innerHTML = html; else console.error("Missing element #"+id+" - the page may need a refresh."); }
+  function showRefining(id){
+    const el = $("#"+id); if(!el) return;
+    if(el.querySelector(".refine-badge")) return;
+    const badge = document.createElement("div");
+    badge.className = "refine-badge";
+    badge.innerHTML = '<span class="dotpulse"></span><span class="dotpulse"></span><span class="dotpulse"></span> Refining with a live, personalised pass\u2026';
+    el.prepend(badge);
+  }
+  function clearRefining(id){
+    const el = $("#"+id); if(!el) return;
+    const b = el.querySelector(".refine-badge");
+    if(b) b.remove();
+  }
+  const initials = n => n.split(/\s+/).map(w=>w[0]).slice(0,2).join("").toUpperCase();
+  const fmtDate = d => { const x=new Date(d+"T00:00:00"); return isNaN(x)?d:x.toLocaleDateString("en-GB",{day:"numeric",month:"short",year:"numeric"}); };
+  const todayISO = () => new Date().toISOString().slice(0,10);
+  const ixFor = id => DB.interactions.filter(i=>i.farmerId===id).sort((a,b)=>b.date.localeCompare(a.date));
+  const lastSeen = id => { const a=ixFor(id); return a.length ? a[0].date : null; };
+  const money = n => "$" + Math.round(Number(n)||0).toLocaleString();
+
+  /* ---------- Claude API ---------- */
+  async function askAI(system, user){
+    const controller = new AbortController();
+    const timeoutId = setTimeout(()=>controller.abort(), 12000);
+    let response;
+    try{
+      response = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        signal: controller.signal,
+        body: JSON.stringify({
+          model: MODEL,
+          max_tokens: 1000,
+          system: system,
+          messages: [{ role: "user", content: user }]
+        })
+      });
+    }catch(fetchErr){
+      if(fetchErr && fetchErr.name === "AbortError") throw new Error("Failed to fetch: request timed out after 12 seconds");
+      throw fetchErr;
+    }finally{
+      clearTimeout(timeoutId);
+    }
+    if(!response.ok){
+      let detail = "";
+      try{ const errJson = await response.json(); detail = errJson && errJson.error ? (errJson.error.message||JSON.stringify(errJson.error)) : JSON.stringify(errJson); }
+      catch(e2){ try{ detail = await response.text(); }catch(e3){ detail = ""; } }
+      throw new Error("API error " + response.status + (detail ? ": " + detail : ""));
+    }
+    const data = await response.json();
+    const text = (data.content||[]).filter(b=>b.type==="text").map(b=>b.text).join("\n");
+    if(!text) throw new Error("Empty response from advisor (no text content returned)");
+    return text;
+  }
+  function parseAIJSON(text){
+    let clean = text.replace(/```json/gi,"").replace(/```/g,"").trim();
+    const start = clean.indexOf("{"); const end = clean.lastIndexOf("}");
+    if(start>=0 && end>start) clean = clean.slice(start, end+1);
+    try{ return JSON.parse(clean); }
+    catch(e){ throw new Error("Could not parse advisor response as JSON: " + e.message + " - raw: " + text.slice(0,200)); }
+  }
+
+  /* ---------- log an AI interaction against the current farmer ---------- */
+  async function logInteraction(tool, detail, quality){
+    if(!currentFarmerId) return;
+    const f = DB.farmers.find(x=>x.id===currentFarmerId);
+    if(!f) return;
+    DB.interactions.push({ id:"IX-"+(2000+DB.interactions.length)+"-"+Date.now()%1000, farmerId:currentFarmerId, tool, date:todayISO(), detail, quality: quality||null });
+    if(f.status==="new") f.status="active";
+    await save();
+    renderCtxHint();
+  }
+
+  /* ---------- best-effort autofill from farmer profile into a <select> ---------- */
+  function trySelect(sel, value){
+    if(!sel || !value) return;
+    const v = value.toLowerCase();
+    const opt = Array.from(sel.options).find(o => o.value && (v.includes(o.value.toLowerCase().split(" ")[0]) || o.value.toLowerCase().includes(v.split(" ")[0]) || v.includes(o.text.toLowerCase().split(" ")[0])));
+    if(opt) sel.value = opt.value;
+  }
+  function autofillForFarmer(){
+    if(!currentFarmerId) return;
+    const f = DB.farmers.find(x=>x.id===currentFarmerId);
+    if(!f) return;
+    trySelect($("#cr_loc"), f.region); trySelect($("#cr_soil"), f.soil); trySelect($("#cr_water"), f.water);
+    trySelect($("#ft_soil"), f.soil); trySelect($("#ft_crop"), f.crop);
+    trySelect($("#pf_crop"), f.crop); trySelect($("#pf_region"), f.region.split("(")[0].trim());
+    trySelect($("#dis_crop"), f.crop);
+    trySelect($("#wt_region"), f.region.split("(")[0].trim()); trySelect($("#wt_crop"), f.crop);
+    trySelect($("#dy_crop"), f.crop);
+  }
+
+  function sysPrefix(){
+    const langNote = language && language !== "English" ? ("Respond entirely in " + language + ", including every string field in the JSON. ") : "";
+    return "You are an expert agricultural advisor inside the Agronome app. You give practical, encouraging, easy-to-understand advice to smallholder and commercial farmers around the world. " + langNote + "Respond with ONLY raw JSON matching the schema described - no markdown, no code fences, no text before or after the JSON. Keep every string field concise (1-3 short sentences max). ";
+  }
+
+  function paras(text){ return String(text||"").split("\n").filter(p=>p.trim()).map(p=>"<p>"+esc(p)+"</p>").join(""); }
+
+  /* ---------- offline fallback (used only if the live advisor can't be reached) ---------- */
+  const CROP_FALLBACK = [
+    {match:"clay", crops:[{name:"Rice / paddy",why:"Clay holds water well, ideal for flooded paddy fields.",expected_margin:"20-35%"},{name:"Wheat",why:"Grows well in clay once drainage is managed after harvest.",expected_margin:"15-25%"},{name:"Sugarcane",why:"Deep clay soils retain the moisture sugarcane needs.",expected_margin:"20-30%"}]},
+    {match:"sandy", crops:[{name:"Groundnut / peanut",why:"Sandy soil drains fast, which groundnut prefers.",expected_margin:"20-30%"},{name:"Tomato",why:"Good drainage suits tomato roots if irrigated regularly.",expected_margin:"25-40%"},{name:"Watermelon",why:"Thrives in loose, fast-draining sandy soil.",expected_margin:"20-35%"}]},
+    {match:"loamy", crops:[{name:"Wheat",why:"Loamy soil is fertile and balanced for wheat.",expected_margin:"20-30%"},{name:"Corn / maize",why:"Rich, well-drained loam supports strong maize yields.",expected_margin:"25-35%"},{name:"Soybean",why:"Loam gives soybean the nutrients and drainage it needs.",expected_margin:"20-30%"}]},
+    {match:"black cotton", crops:[{name:"Cotton",why:"Black cotton soil is literally built for cotton - high clay, retains moisture.",expected_margin:"20-30%"},{name:"Soybean",why:"Handles the heavy clay well between cotton cycles.",expected_margin:"15-25%"},{name:"Sorghum",why:"Tolerates the cracking, moisture-retentive soil.",expected_margin:"15-20%"}]},
+    {match:"red laterite", crops:[{name:"Groundnut / peanut",why:"Copes well with the lower fertility of laterite soil.",expected_margin:"15-25%"},{name:"Millet",why:"Hardy crop suited to acidic, rain-fed laterite soil.",expected_margin:"15-20%"},{name:"Cassava",why:"Tolerant of poor, acidic soils with minimal input.",expected_margin:"20-30%"}]},
+    {match:"silty", crops:[{name:"Potato",why:"Silty soil's fine texture suits tuber development.",expected_margin:"20-35%"},{name:"Onion",why:"Smooth, moisture-retentive silt favours bulb crops.",expected_margin:"20-30%"},{name:"Wheat",why:"Fertile silt gives consistent wheat yields.",expected_margin:"15-25%"}]}
+  ];
+  function fallbackCrop(soil){
+    const s = (soil||"").toLowerCase();
+    const hit = CROP_FALLBACK.find(c=>s.includes(c.match)) || CROP_FALLBACK[2];
+    return {crops:hit.crops, season_note:"General guidance shown offline - confirm exact timing with your local agricultural calendar."};
+  }
+  const FERT_FALLBACK = {
+    wheat:{product:"Urea + DAP",week1:"Apply 50 kg DAP per acre before sowing, mixed into the soil.",week3:"Apply 25 kg Urea per acre after first irrigation, when plants are knee-high.",week6:"Apply 25 kg Urea per acre again at flowering. Water lightly after.",warning:"Do not apply Urea on dry soil - it can burn roots. Always water first.",encouragement:"Feeding wheat on time gives noticeably better grain fill."},
+    rice:{product:"Urea + SSP",week1:"Apply 40 kg SSP per acre before transplanting.",week3:"Apply 30 kg Urea per acre 3 weeks after transplanting.",week6:"Apply 20 kg Urea per acre at panicle initiation.",warning:"Do not over-flood the field right after applying Urea.",encouragement:"Rice fed at the right stage fills more grain per plant."},
+    corn:{product:"Urea + NPK 10-26-26",week1:"Apply 50 kg NPK 10-26-26 per acre at sowing.",week3:"Apply 35 kg Urea per acre when plants are knee-high.",week6:"Apply 25 kg Urea per acre when tassels appear.",warning:"Avoid applying fertilizer right before heavy rain - it washes away.",encouragement:"Corn is a heavy nitrogen feeder - steady feeding fills every cob."},
+    potato:{product:"NPK 12-32-16 + Urea",week1:"Apply 75 kg NPK 12-32-16 per acre at planting.",week3:"Apply 25 kg Urea per acre when plants are 15-20cm tall.",week6:"Apply 20 kg MOP per acre when tubers form.",warning:"Avoid excess nitrogen after flowering - it favours leaves over tubers.",encouragement:"Careful potato feeding pays off clearly at harvest."},
+    tomato:{product:"NPK 19-19-19 + Calcium",week1:"Apply 40 kg NPK 19-19-19 per acre at transplanting.",week3:"Apply 20 kg Urea per acre at flowering.",week6:"Apply 15 kg MOP per acre as fruit starts to swell.",warning:"Avoid excess nitrogen at fruiting stage.",encouragement:"Well-timed feeding means more fruit per plant."},
+    cotton:{product:"Urea + DAP + MOP",week1:"Apply 50 kg DAP + 25 kg MOP per acre at sowing.",week3:"Apply 30 kg Urea per acre 30 days after sowing.",week6:"Apply 25 kg Urea per acre at boll formation.",warning:"Don't skip potash - cotton without it gives weak fibre.",encouragement:"Cotton rewards patient, staged feeding."},
+    soybean:{product:"DAP + MOP (low nitrogen)",week1:"Apply 40 kg DAP + 20 kg MOP per acre at sowing.",week3:"Apply a foliar micronutrient spray at 4 weeks.",week6:"Apply 15 kg MOP per acre at pod filling.",warning:"Avoid heavy Urea - soybean fixes its own nitrogen.",encouragement:"Soybean is one of the easier crops to feed correctly."},
+    onion:{product:"NPK 15-15-15 + Urea",week1:"Apply 50 kg NPK 15-15-15 per acre at transplanting.",week3:"Apply 20 kg Urea per acre 3 weeks after transplanting.",week6:"Apply 15 kg MOP per acre when bulbs are marble-sized.",warning:"Stop fertilizing within 3 weeks of harvest.",encouragement:"Well-fed onions fetch better prices at market."},
+    sugarcane:{product:"Urea + SSP + MOP",week1:"Apply 60 kg SSP + 40 kg MOP per acre at planting.",week3:"Apply 50 kg Urea per acre 45 days after planting.",week6:"Apply 50 kg Urea + 20 kg MOP per acre at 90 days.",warning:"Avoid Urea in waterlogged conditions.",encouragement:"A long crop, but staged feeding is worth it."},
+    groundnut:{product:"SSP + Gypsum",week1:"Apply 50 kg SSP per acre at sowing.",week3:"Apply 200 kg Gypsum per acre at 40 days.",week6:"Apply a 2% DAP foliar spray at pod filling.",warning:"Avoid heavy nitrogen - groundnut fixes its own.",encouragement:"Gypsum-fed groundnut gives more pods and better oil content."},
+    mustard:{product:"Urea + DAP + Sulphur",week1:"Apply 40 kg DAP + 10 kg Sulphur per acre at sowing.",week3:"Apply 30 kg Urea per acre 3-4 weeks after sowing.",week6:"Apply 20 kg Urea per acre just before flowering.",warning:"Don't skip sulphur - mustard needs it for oil content.",encouragement:"A short-season crop with good returns when fed right."},
+    chilli:{product:"NPK 19-19-19 + Calcium",week1:"Apply 40 kg NPK 19-19-19 per acre at transplanting.",week3:"Apply 20 kg Urea per acre at 30 days.",week6:"Apply 15 kg MOP per acre as fruit sets.",warning:"Avoid over-watering right after fertilizing - wet roots absorb less.",encouragement:"On-time feeding means more fruit and better colour."}
+  };
+  function fallbackFert(crop){
+    const c=(crop||"").toLowerCase();
+    const key = Object.keys(FERT_FALLBACK).find(k=>c.includes(k)) || "wheat";
+    return FERT_FALLBACK[key];
+  }
+  const WEATHER_FALLBACK = {
+    Hot:{irrigate:"Yes - early morning or evening",why:"High heat means fast evaporation; irrigate outside peak sun hours to avoid loss.",todo:["Irrigate early morning or after sunset, never midday.","Check for wilting or leaf curl, a sign of heat stress.","Add mulch if available to slow moisture loss from soil."],avoid:"Avoid spraying pesticide or fertilizer in the hottest hours - it can scorch leaves.",watch:"If heat continues, watch for early flowering or fruit drop over the next 3 days."},
+    Warm:{irrigate:"Check soil moisture first",why:"Warm, pleasant conditions are generally safe, but confirm the top 5cm of soil isn't already moist.",todo:["Check soil moisture before deciding to irrigate.","Continue routine weeding and pest checks.","Good window for planting or transplanting if not already done."],avoid:"Avoid over-irrigating just because it's warm - check the soil first.",watch:"Watch the forecast for any sudden heat or rain over the next 3 days."},
+    Cold:{irrigate:"Reduce irrigation",why:"Cold slows plant water use; overwatering in cold conditions risks root rot.",todo:["Reduce irrigation frequency until temperatures rise.","Cover young or sensitive plants if frost is expected overnight.","Delay any new planting until the cold snap passes."],avoid:"Avoid irrigating late in the day - wet soil overnight increases frost risk.",watch:"Watch for frost damage on leaf tips over the next 3 days."},
+    Rainy:{irrigate:"No - rain is doing it for you",why:"Rain is supplying the water your crop needs; extra irrigation risks waterlogging and root rot.",todo:["Check drainage channels and clear any blockages.","After rain, check for and re-stake any fallen plants.","Inspect for fungal disease symptoms 1-2 days after rain stops."],avoid:"Do not spray pesticides during rain - they wash off and are wasted.",watch:"If rain continues past 3 days, watch closely for waterlogging and root damage."},
+    Windy:{irrigate:"Check soil moisture first",why:"Wind dries soil faster than normal; check moisture 5cm deep before deciding.",todo:["Check for and stake any plants knocked over by wind.","Delay spraying - wind blows chemicals away from the target.","Check irrigation lines and drippers for wind damage."],avoid:"Avoid spraying pesticide or fertilizer today - wind wastes it.",watch:"If wind continues, be ready to irrigate as soil dries out faster than usual."}
+  };
+  function fallbackWeather(weather){
+    const w=(weather||"").toLowerCase();
+    let key="Warm";
+    if(w.includes("hot")) key="Hot";
+    else if(w.includes("cold") || w.includes("frost")) key="Cold";
+    else if(w.includes("rain")) key="Rainy";
+    else if(w.includes("wind")) key="Windy";
+    return WEATHER_FALLBACK[key];
+  }
+  const DISEASE_FALLBACK = [
+    {match:"yellow", diagnosis:"Likely nitrogen deficiency (or early viral infection if patchy)",likely_cause:"Yellowing often signals a nutrient shortage, most commonly nitrogen.",treatment:["Apply a light top-dress of nitrogen fertilizer.","Check the soil isn't waterlogged, which blocks nutrient uptake.","Re-check in 5-7 days - if yellowing spreads unevenly, consider a viral cause."],prevention:"Follow a staged fertilizer schedule so nutrients don't run out mid-season."},
+    {match:"brown", diagnosis:"Likely fungal leaf spot disease",likely_cause:"Brown/black spots are a classic sign of fungal infection, often from humidity.",treatment:["Remove and destroy the worst-affected leaves.","Apply a copper-based or general fungicide spray.","Improve airflow between plants if they're densely spaced."],prevention:"Avoid overhead watering late in the day - wet leaves overnight encourage fungus."},
+    {match:"white", diagnosis:"Likely powdery mildew",likely_cause:"White powdery coating is a textbook sign of powdery mildew fungus.",treatment:["Spray a sulfur-based or neem oil fungicide.","Remove badly affected leaves to slow spread.","Increase spacing/airflow around plants where possible."],prevention:"Avoid excess nitrogen, which produces the soft leaf growth mildew prefers."},
+    {match:"curl", diagnosis:"Likely viral infection or aphid/whitefly feeding damage",likely_cause:"Leaf curl is commonly caused by sap-sucking pests spreading virus.",treatment:["Inspect the underside of curled leaves for aphids or whiteflies.","Apply neem oil or an appropriate insecticide if pests are found.","Remove severely curled/stunted plants to limit virus spread."],prevention:"Control aphids and whiteflies early - they're the main virus carriers."},
+    {match:"holes", diagnosis:"Likely caterpillar or beetle feeding damage",likely_cause:"Clean holes in leaves are typically chewing damage from insects.",treatment:["Inspect leaves (including undersides) for caterpillars or beetles.","Hand-remove pests if the infestation is light.","Apply a targeted insecticide or neem spray if spread is wider."],prevention:"Regular early-morning field walks catch pest outbreaks before they spread."},
+    {match:"wilt", diagnosis:"Likely root stress - waterlogging, root disease, or root damage",likely_cause:"Wilting despite watering usually means roots can't take up water properly.",treatment:["Check soil isn't waterlogged around the root zone.","Gently inspect roots for rot (soft, dark, foul-smelling roots) or pests.","Ease off irrigation until soil drains and re-assess in 2-3 days."],prevention:"Ensure good drainage at planting to avoid recurring root stress."},
+    {match:"sticky", diagnosis:"Likely sap-sucking insect infestation (aphids, scale, or mealybugs)",likely_cause:"A sticky residue (honeydew) is typically left behind by aphids or scale insects.",treatment:["Spray affected plants with neem oil or insecticidal soap.","Wipe down heavily coated leaves with a damp cloth.","Repeat spray after 5-7 days to catch newly hatched pests."],prevention:"Check the underside of leaves weekly to catch aphid colonies early."},
+    {match:"insects", diagnosis:"Active pest infestation - identify the insect for exact treatment",likely_cause:"Visible insects suggest active feeding damage in progress.",treatment:["Confirm the pest type where possible before choosing a spray.","Apply neem oil as a safe general first treatment.","Escalate to a targeted insecticide if neem doesn't control it in a week."],prevention:"Weekly inspection walks help catch infestations while still small."},
+    {match:"rotting", diagnosis:"Likely stem/root rot from fungal or bacterial infection",likely_cause:"Rotting at the base combined with plants falling over usually means fungal or bacterial stem rot.",treatment:["Remove and destroy severely affected plants to stop spread.","Improve drainage around the base of remaining plants.","Apply a fungicide drench to nearby healthy plants as a precaution."],prevention:"Avoid overwatering and keep mulch away from direct stem contact."}
+  ];
+  function fallbackDisease(symptom){
+    const s=(symptom||"").toLowerCase();
+    return DISEASE_FALLBACK.find(d=>s.includes(d.match)) || DISEASE_FALLBACK[0];
+  }
+  const PROFIT_PER_ACRE = {wheat:{yield:1.8,price:280,seed:45,fert:70,labour:90,irr:40,other:25},"rice":{yield:2.4,price:260,seed:55,fert:85,labour:120,irr:70,other:30},corn:{yield:3.2,price:210,seed:60,fert:95,labour:100,irr:55,other:30},potato:{yield:9,price:180,seed:220,fert:130,labour:160,irr:60,other:40},tomato:{yield:12,price:220,seed:180,fert:120,labour:220,irr:70,other:50},cotton:{yield:0.7,price:1600,seed:90,fert:110,labour:150,irr:80,other:40},soybean:{yield:1.4,price:420,seed:60,fert:55,labour:70,irr:20,other:25},onion:{yield:8,price:200,seed:150,fert:100,labour:140,irr:50,other:35},sugarcane:{yield:35,price:35,seed:250,fert:180,labour:220,irr:120,other:60}};
+  function fallbackProfit(crop, acres){
+    const c=(crop||"").toLowerCase();
+    const key = Object.keys(PROFIT_PER_ACRE).find(k=>c.includes(k)) || "wheat";
+    const p = PROFIT_PER_ACRE[key];
+    const a = Number(acres)||1;
+    const seed=p.seed*a, fertilizer=p.fert*a, labour=p.labour*a, irrigation=p.irr*a, other=p.other*a;
+    const total_cost = seed+fertilizer+labour+irrigation+other;
+    const yield_tonnes = p.yield*a;
+    const revenue = yield_tonnes*p.price;
+    const profit = revenue-total_cost;
+    const margin = revenue ? (profit/revenue*100) : 0;
+    return {revenue,seed,fertilizer,labour,irrigation,other,total_cost,profit,margin,yield_tonnes,price_per_tonne:p.price,
+      tip:"Buying seed and fertilizer in bulk with neighbouring farmers can meaningfully cut input costs.",
+      risk:"Market prices shown are indicative - confirm current local rates before committing."};
+  }
+  function fallbackCompare(cropA, cropB, acres){
+    const pa = fallbackProfit(cropA, acres);
+    const pb = fallbackProfit(cropB, acres);
+    const winner = pa.profit >= pb.profit ? cropA : cropB;
+    return {
+      a: {name:cropA, profit:pa.profit, margin:pa.margin, total_cost:pa.total_cost, revenue:pa.revenue},
+      b: {name:cropB, profit:pb.profit, margin:pb.margin, total_cost:pb.total_cost, revenue:pb.revenue},
+      verdict: `Based on typical costs and prices, ${winner} shows the stronger expected profit for this farm size. Actual results depend on your local prices and conditions.`
+    };
+  }
+  function renderCompareHTML(d, acres){
+    const bar = (val, max) => Math.max(4, Math.round((val/max)*100));
+    const maxProfit = Math.max(Math.abs(d.a.profit), Math.abs(d.b.profit), 1);
+    const row = (c) => `
+      <div class="crop-pick">
+        <span class="cp-margin">${money(c.profit)} profit</span>
+        <div class="cp-name">${esc(c.name)}</div>
+        <div class="cp-why">Revenue ${money(c.revenue)} - Costs ${money(c.total_cost)} - Margin ${Math.round(c.margin)}%</div>
+        <div class="bar" style="margin-top:8px"><div class="track"><div class="fill" style="width:${bar(Math.max(c.profit,0),maxProfit)}%"></div></div></div>
+      </div>`;
+    return row(d.a) + row(d.b) + `<div class="tip-box"><div class="tip-label">Verdict</div><div class="tip-text">${esc(d.verdict)}</div></div>`;
+  }
+  async function runCompare(){
+    const a = $("#cmp_a").value, b = $("#cmp_b").value, acres = $("#cmp_acres").value;
+    if(!a || !b){ alert("Please select both crops to compare."); return; }
+    if(a === b){ alert("Please select two different crops."); return; }
+    $("#cmp_btn").disabled = true;
+    const fb = fallbackCompare(a, b, acres);
+    setHTML("cmp_text", renderCompareHTML(fb, acres));
+    $("#cmp_result").style.display = "block";
+    showRefining("cmp_text");
+    let final = { ...fb, live:false };
+    try{
+      const sys = sysPrefix() + 'Schema: {"a":{"name":string,"profit":number,"margin":number,"total_cost":number,"revenue":number},"b":{"name":string,"profit":number,"margin":number,"total_cost":number,"revenue":number},"verdict":string}';
+      const user = `Compare growing ${a} versus ${b} on a ${acres}-acre farm. Estimate realistic revenue, total cost, net profit (USD) and profit margin (%) for each on this farm size, then give a short verdict on which is the stronger choice and why.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { ...d, live:true };
+    }catch(e){ console.error(e); }
+    clearRefining("cmp_text");
+    setHTML("cmp_text", renderCompareHTML(final, acres));
+    await logInteraction("crop", (final.live?"Compared: ":"Compared (offline): ") + a + " vs " + b, null);
+    $("#cmp_btn").disabled = false;
+  }
+
+  /* ---- 1. Crop Advisor ---- */
+  function renderCropHTML(crops, seasonNote){
+    return (crops||[]).map(c=>`<div class="crop-pick"><span class="cp-margin">${esc(c.expected_margin||"")}</span><div class="cp-name">${esc(c.name||"")}</div><div class="cp-why">${esc(c.why||"")}</div></div>`).join("") +
+      (seasonNote ? `<div class="tip-box"><div class="tip-label">📅 Season note</div><div class="tip-text">${esc(seasonNote)}</div></div>` : "");
+  }
+  async function runCrop(){
+    const loc=$("#cr_loc").value, soil=$("#cr_soil").value, water=$("#cr_water").value, budget=$("#cr_budget").value, market=$("#cr_market").value;
+    if(!loc || !soil || !water || !budget){ alert("Please select region, soil, water and budget."); return; }
+    $("#cr_btn").disabled = true;
+    const fb = fallbackCrop(soil);
+    setHTML("cr_text", renderCropHTML(fb.crops, fb.season_note));
+    $("#cr_result").style.display = "block";
+    showRefining("cr_text");
+    let final = { crops: fb.crops, season_note: fb.season_note, live: false };
+    try{
+      const sys = sysPrefix() + 'Schema: {"crops":[{"name":string,"why":string,"expected_margin":string} x3],"season_note":string}';
+      const user = `Region: ${loc}\nSoil: ${soil}\nWater/irrigation: ${water}\nBudget per acre: ${budget}\nNearest market: ${market||"not specified"}\nRecommend the top 3 crops to grow, with a one-line reason each and an expected profit margin range, plus one short seasonal timing note.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { crops: d.crops, season_note: d.season_note, live: true };
+    }catch(e){ console.error(e); }
+    clearRefining("cr_text");
+    setHTML("cr_text", renderCropHTML(final.crops, final.season_note));
+    await logInteraction("crop", (final.live?"Recommended: ":"Recommended (offline): ") + (final.crops||[]).map(c=>c.name).filter(Boolean).join(", "), null);
+    $("#cr_btn").disabled=false;
+  }
+
+  /* ---- 2. Fertilizer Plan ---- */
+  function renderFertHTML(d){
+    return paras(`Recommended: ${d.product||""}`) +
+      `<p><strong>Week 1:</strong> ${esc(d.week1||"")}</p><p><strong>Week 3:</strong> ${esc(d.week3||"")}</p><p><strong>Week 6:</strong> ${esc(d.week6||"")}</p>` +
+      (d.warning ? `<div class="warn-box"><div class="warn-label">⚠️ Caution</div><div class="tip-text">${esc(d.warning)}</div></div>` : "") +
+      (d.encouragement ? `<div class="tip-box"><div class="tip-label">💡 Note</div><div class="tip-text">${esc(d.encouragement)}</div></div>` : "");
+  }
+  async function runFert(){
+    const soil=$("#ft_soil").value, crop=$("#ft_crop").value, rain=$("#ft_rain").value, season=$("#ft_season").value, prob=$("#ft_prob").value;
+    if(!soil || !crop){ alert("Please select soil type and crop."); return; }
+    $("#ft_btn").disabled = true;
+    const fb = fallbackFert(crop);
+    setHTML("ft_text", renderFertHTML(fb));
+    $("#ft_result").style.display = "block";
+    showRefining("ft_text");
+    let final = { ...fb, live:false };
+    try{
+      const sys = sysPrefix() + 'Schema: {"product":string,"week1":string,"week3":string,"week6":string,"warning":string,"encouragement":string}';
+      const user = `Soil: ${soil}\nCrop: ${crop}\nRainfall level: ${rain||"not specified"}\nSeason: ${season||"not specified"}\nMain problem observed: ${prob||"none"}\nGive a simple week-by-week fertilizer plan (week 1, week 3, week 6) naming the product and quantity per acre, one safety warning, and one short line of encouragement.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { ...d, live:true };
+    }catch(e){ console.error(e); }
+    clearRefining("ft_text");
+    setHTML("ft_text", renderFertHTML(final));
+    await logInteraction("fertilizer", (final.live?"Fertilizer plan generated: ":"Fertilizer plan generated (offline): ") + (final.product||"schedule") + " for " + crop, null);
+    $("#ft_btn").disabled=false;
+  }
+
+  /* ---- 3. Profit Forecast ---- */
+  function renderProfitHTML(d){
+    const pc = (Number(d.profit)>=0) ? "positive" : "negative";
+    const stats = `<div class="stat-card"><div class="stat-val">${money(d.revenue)}</div><div class="stat-lbl">Expected revenue</div></div>` +
+      `<div class="stat-card"><div class="stat-val">${money(d.total_cost)}</div><div class="stat-lbl">Total costs</div></div>` +
+      `<div class="stat-card"><div class="stat-val ${pc}">${money(d.profit)}</div><div class="stat-lbl">Net profit</div></div>` +
+      `<div class="stat-card"><div class="stat-val">${Math.round(Number(d.margin)||0)}%</div><div class="stat-lbl">Profit margin</div></div>`;
+    const text = '<table class="cost-table">' +
+      `<tr><td>🌾 Seed cost</td><td>${money(d.seed)}</td></tr>` +
+      `<tr><td>🪣 Fertilizer</td><td>${money(d.fertilizer)}</td></tr>` +
+      `<tr><td>👷 Labour</td><td>${money(d.labour)}</td></tr>` +
+      `<tr><td>💧 Irrigation</td><td>${money(d.irrigation)}</td></tr>` +
+      `<tr><td>📦 Other costs</td><td>${money(d.other)}</td></tr>` +
+      `<tr><td style="font-weight:600;color:var(--soil)">🌿 Expected yield</td><td>${(Number(d.yield_tonnes)||0).toFixed(1)} tonnes</td></tr>` +
+      `<tr><td>💵 Market price per tonne</td><td>${money(d.price_per_tonne)}</td></tr>` +
+      '</table>' +
+      (d.tip?`<div class="tip-box"><div class="tip-label">💡 Tip to grow your profit</div><div class="tip-text">${esc(d.tip)}</div></div>`:"") +
+      (d.risk?`<div class="warn-box"><div class="warn-label">⚠️ Risk to watch out for</div><div class="tip-text">${esc(d.risk)}</div></div>`:"");
+    return { stats, text };
+  }
+  async function runProfit(){
+    const crop=$("#pf_crop").value, acres=$("#pf_acres").value, region=$("#pf_region").value, irr=$("#pf_irr").value;
+    if(!crop || !acres || !region){ alert("Please select crop, farm size and region."); return; }
+    $("#pf_btn").disabled = true;
+    const fb = fallbackProfit(crop, acres);
+    let rendered = renderProfitHTML(fb);
+    $("#pf_stats").style.display="grid";
+    $("#pf_stats").innerHTML = rendered.stats;
+    setHTML("pf_text", rendered.text);
+    $("#pf_result").style.display = "block";
+    showRefining("pf_text");
+    let final = { ...fb, live:false };
+    try{
+      const sys = sysPrefix() + 'Schema (all money fields are numbers in USD, margin is a number percent): {"revenue":number,"seed":number,"fertilizer":number,"labour":number,"irrigation":number,"other":number,"total_cost":number,"profit":number,"margin":number,"yield_tonnes":number,"price_per_tonne":number,"tip":string,"risk":string}';
+      const user = `Crop: ${crop}\nFarm size: ${acres} acres\nRegion: ${region}\nIrrigation type: ${irr||"not specified"}\nEstimate a realistic per-season cost and profit breakdown for this farm size (seed, fertilizer, labour, irrigation, other costs, expected yield in tonnes, market price per tonne, revenue, total cost, net profit, profit margin percent). Add one tip to grow profit and one risk to watch for.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { ...d, live:true };
+    }catch(e){ console.error(e); }
+    clearRefining("pf_text");
+    rendered = renderProfitHTML(final);
+    $("#pf_stats").innerHTML = rendered.stats;
+    setHTML("pf_text", rendered.text);
+    await logInteraction("profit", (final.live?"Profit forecast: ":"Profit forecast (offline): ") + `${money(final.profit)} net on ${acres} acres of ${crop}`, null);
+    $("#pf_btn").disabled=false;
+  }
+
+  /* ---- 4. Disease Check ---- */
+  function selectSym(btn, val){
+    $$(".symptom-btn").forEach(b=>b.classList.remove("selected"));
+    btn.classList.add("selected");
+    selectedSym = val;
+    $("#dis_sym_val").value = val;
+  }
+  let diseasePhoto = null;
+  function onDiseasePhoto(event){
+    const file = event.target.files && event.target.files[0];
+    if(!file) return;
+    if(!file.type || !file.type.startsWith("image/")){ alert("Please upload an image file (JPG, PNG, etc)."); return; }
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      const match = /^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/.exec(dataUrl);
+      if(!match){ alert("Could not read that image. Please try a different file."); return; }
+      diseasePhoto = { mediaType: match[1], base64: match[2] };
+      const img = $("#dis_photo_img"); if(img) img.src = dataUrl;
+      const prev = $("#dis_photo_preview"); if(prev) prev.style.display = "block";
+    };
+    reader.readAsDataURL(file);
+  }
+  function clearDiseasePhoto(){
+    diseasePhoto = null;
+    const input = $("#dis_photo"); if(input) input.value = "";
+    const prev = $("#dis_photo_preview"); if(prev) prev.style.display = "none";
+  }
+  function renderDiseaseHTML(d){
+    return paras(`Likely diagnosis: ${d.diagnosis||""}`) +
+      (d.likely_cause?`<p><strong>Cause:</strong> ${esc(d.likely_cause)}</p>`:"") +
+      `<p><strong>Treatment plan:</strong></p>` + (d.treatment||[]).map((t,i)=>`<p>${i+1}. ${esc(t)}</p>`).join("") +
+      (d.prevention?`<div class="tip-box"><div class="tip-label">Prevent this next time</div><div class="tip-text">${esc(d.prevention)}</div></div>`:"");
+  }
+  async function runDisease(){
+    const crop=$("#dis_crop").value, part=$("#dis_part").value, spread=$("#dis_spread").value, when=$("#dis_when").value;
+    if(!crop || (!selectedSym && !diseasePhoto)){ alert("Please select your crop, and either click a symptom or upload a photo."); return; }
+    $("#dis_btn").disabled = true;
+    const fb = selectedSym ? fallbackDisease(selectedSym) : {
+      diagnosis: "Photo uploaded - a live connection is needed to analyse it",
+      likely_cause: "A precise diagnosis from a photo requires reaching the live advisor.",
+      treatment: ["We'll try to analyse your photo now.", "If that doesn't come through, also select the closest matching symptom above for instant guidance.", "If the problem looks severe, consult a local agronomist or extension office."],
+      prevention: "Regular field walks help catch problems while they are still small."
+    };
+    setHTML("dis_text", renderDiseaseHTML(fb));
+    $("#dis_result").style.display = "block";
+    showRefining("dis_text");
+    let final = { ...fb, live:false };
+    try{
+      const sys = sysPrefix() + 'Schema: {"diagnosis":string,"likely_cause":string,"treatment":[string,string,string],"prevention":string}';
+      const textPrompt = `Crop: ${crop}\nAffected part: ${part||"not specified"}\nSymptom observed: ${selectedSym||"see attached photo"}\nSpread on farm: ${spread||"not specified"}\nFirst noticed: ${when||"not specified"}\nAdditional notes from farmer: ${($("#dis_notes").value||"none").trim()}\nGive the most likely diagnosis, its cause, a 3-step treatment plan, and one prevention tip for next time.${diseasePhoto?" Use the attached photo as the primary evidence for your diagnosis.":""}`;
+      const user = diseasePhoto
+        ? [ { type:"image", source:{ type:"base64", media_type: diseasePhoto.mediaType, data: diseasePhoto.base64 } }, { type:"text", text: textPrompt } ]
+        : textPrompt;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { ...d, live:true };
+    }catch(e){ console.error(e); }
+    clearRefining("dis_text");
+    setHTML("dis_text", renderDiseaseHTML(final));
+    await logInteraction("disease", (final.live?"Diagnosis: ":"Diagnosis (offline): ") + (final.diagnosis||selectedSym||"photo-based check"), null);
+    $("#dis_btn").disabled=false;
+  }
+
+  /* ---- 5. Weather Advice ---- */
+  function renderWeatherHTML(d){
+    return `<p><strong>1) Irrigate today?</strong> ${esc(d.irrigate||"")} - ${esc(d.why||"")}</p>` +
+      `<p><strong>2) Three things to do on your farm today</strong></p>` + (d.todo||[]).map((t,i)=>`<p>${i+1}. ${esc(t)}</p>`).join("") +
+      (d.avoid?`<div class="warn-box"><div class="warn-label">⚠️ One thing to avoid today</div><div class="tip-text">${esc(d.avoid)}</div></div>`:"") +
+      (d.watch?`<div class="tip-box"><div class="tip-label">👀 Watch for the next 3 days</div><div class="tip-text">${esc(d.watch)}</div></div>`:"");
+  }
+  async function runWeather(){
+    const region=$("#wt_region").value, crop=$("#wt_crop").value, stage=$("#wt_stage").value, weather=$("#wt_weather").value;
+    if(!region || !crop){ alert("Please select your region and crop."); return; }
+    $("#wt_btn").disabled = true;
+    const fb = fallbackWeather(weather);
+    setHTML("wt_text", renderWeatherHTML(fb));
+    $("#wt_result").style.display = "block";
+    showRefining("wt_text");
+    let final = { ...fb, live:false };
+    try{
+      const sys = sysPrefix() + 'Schema: {"irrigate":string,"why":string,"todo":[string,string,string],"avoid":string,"watch":string}';
+      const user = `Region: ${region}\nCrop: ${crop}\nGrowth stage: ${stage||"not specified"}\nWeather today: ${weather||"warm and pleasant"}\nAnswer: should the farmer irrigate today (yes/no + why), 3 things to do on the farm today, 1 thing to avoid today, and what to watch for over the next 3 days.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      final = { ...d, live:true };
+    }catch(e){ console.error(e); }
+    clearRefining("wt_text");
+    setHTML("wt_text", renderWeatherHTML(final));
+    await logInteraction("weather", (final.live?"Weather advice: ":"Weather advice (offline): ") + (final.irrigate||"guidance") + " for " + crop, null);
+    $("#wt_btn").disabled=false;
+  }
+
+  /* ---- 6. Farm Diary ---- */
+  async function addEntry(){
+    const act=$("#dy_act").value, crop=$("#dy_crop").value, note=$("#dy_note").value;
+    if(!act || !crop){ alert("Please select an activity and a crop."); return; }
+    const today = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'});
+    const tagMap = {'Irrigated':'blue','Applied':'green','Sprayed':'yellow','Ploughed':'green','Planted':'green','Did weeding':'yellow','Harvested':'green','Sold':'blue','Soil testing':'blue','Farm inspection':'blue'};
+    const tagKey = Object.keys(tagMap).find(k=>act.startsWith(k)) || 'green';
+    const div = document.createElement('div');
+    div.className = 'diary-entry';
+    div.innerHTML = `<div class="diary-meta"><span class="diary-date">${today}</span><span class="tag tag-${tagMap[tagKey]}">${esc(act)}</span><span class="tag tag-yellow">${esc(crop)}</span></div><div class="diary-text">${esc(act)} - ${esc(crop)}. ${esc(note||'No additional notes.')}</div>`;
+    const list = $("#dy_list");
+    list.insertBefore(div, list.children[1]);
+    ["dy_act","dy_crop","dy_note"].forEach(id=>{ $("#"+id).selectedIndex = 0; });
+    await logInteraction("diary", `Diary: ${act} - ${crop}${note?": "+note:""}`, null);
+  }
+  function fallbackDiarySummary(entries){
+    const text = entries.join(" ").toLowerCase();
+    const crops = ["wheat","rice","corn","maize","potato","tomato","cotton","soybean","onion"].filter(c=>text.includes(c));
+    const flags = [];
+    if(text.includes("yellow")||text.includes("pest")||text.includes("insect")||text.includes("disease")) flags.push("a possible pest or nutrient issue was noted");
+    if(text.includes("dry")||text.includes("no rain")) flags.push("dry conditions came up more than once");
+    if(text.includes("rain")||text.includes("irrigat")) flags.push("watering has been kept up");
+    const summary = `Over your last ${entries.length} entries${crops.length?" on "+crops.join(", "):""}, things look ${flags.length?"mostly on track, with a couple of points worth watching":"steady"}.` +
+      (flags.length ? " Specifically: " + flags.join("; ") + "." : " Keep logging regularly to build a clear picture over the season.");
+    return { summary, suggestion: "Review any entries mentioning pests, disease or dry soil first, since those are the ones most likely to need action this week." };
+  }
+  async function runDiarySummary(){
+    const entries = $$("#dy_list .diary-text").map(el=>el.textContent).slice(0,8);
+    if(!entries.length){ alert("Log a few diary entries first, then ask for a summary."); return; }
+    $("#dy_sum_btn").disabled = true;
+    const fb = fallbackDiarySummary(entries);
+    setHTML("dy_sum_result", `<div class="tip-box"><div class="tip-label">📓 Weekly summary</div><div class="tip-text">${esc(fb.summary)}</div></div><div class="tip-box"><div class="tip-label">💡 Suggestion for next week</div><div class="tip-text">${esc(fb.suggestion)}</div></div>`);
+    $("#dy_sum_result").style.display = "block";
+    showRefining("dy_sum_result");
+    try{
+      const sys = sysPrefix() + 'Schema: {"summary":string,"suggestion":string}';
+      const user = `Here are the farmer's recent diary entries:\n- ${entries.join("\n- ")}\nWrite a short 2-3 sentence summary of how the farm is doing, plus one practical suggestion for the coming week.`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      clearRefining("dy_sum_result");
+      setHTML("dy_sum_result", `<div class="tip-box"><div class="tip-label">📓 Weekly summary</div><div class="tip-text">${esc(d.summary||"")}</div></div>` +
+        (d.suggestion?`<div class="tip-box"><div class="tip-label">💡 Suggestion for next week</div><div class="tip-text">${esc(d.suggestion)}</div></div>`:""));
+    }catch(e){ console.error(e); clearRefining("dy_sum_result"); }
+    $("#dy_sum_btn").disabled = false;
+  }
+
+  /* ---------- CRM: dashboard ---------- */
+  const STATUS_COLOR = {new:"#4f8a3d", active:"#e7c14b", lead:"#b5552d", dormant:"#b9b0a0"};
+  function renderDash(){
+    const f=DB.farmers, ix=DB.interactions;
+    const leads = f.filter(x=>x.status==="lead").length;
+    const active = f.filter(x=>x.status==="active"||x.status==="lead").length;
+    const rated = ix.filter(i=>i.quality);
+    const avgQ = rated.length ? (rated.reduce((s,i)=>s+i.quality,0)/rated.length) : 0;
+    $("#m-farmers").textContent = f.length;
+    $("#m-interactions").textContent = ix.length;
+    $("#m-active").textContent = active;
+    $("#m-leads").textContent = leads;
+    $("#m-quality").textContent = rated.length ? avgQ.toFixed(1)+" / 5" : " - ";
+
+    const counts = {};
+    Object.keys(TOOLS).forEach(k=>counts[k]=0);
+    ix.forEach(i=>{ if(counts[i.tool]!=null) counts[i.tool]++; });
+    const max = Math.max(1, ...Object.values(counts));
+    $("#toolbars").innerHTML = Object.keys(TOOLS).map(k=>{
+      const n = counts[k];
+      const pct = Math.round((n/max)*100);
+      return `<div class="bar"><div class="lab">${TOOLS[k].icon} ${TOOLS[k].label}</div><div class="track"><div class="fill" style="width:${pct}%"></div></div><div class="num">${n}</div></div>`;
+    }).join("");
+
+    const recent = [...ix].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,8);
+    $("#feed").innerHTML = recent.length ? recent.map(i=>{
+      const farmer = f.find(x=>x.id===i.farmerId) || {name:"Unknown"};
+      return `<li><span class="ic">${TOOLS[i.tool].icon}</span><div><div><span class="who">${esc(farmer.name)}</span> <span class="meta">· ${TOOLS[i.tool].label}</span></div><div class="meta">${fmtDate(i.date)} - ${esc(i.detail)}</div></div></li>`;
+    }).join("") : '<li class="muted">No activity yet.</li>';
+
+    renderStatusDonut(f);
+    renderTrendChart(ix);
+    renderGrowthChart(f);
+  }
+
+  function renderStatusDonut(farmers){
+    const el = $("#status-donut"); if(!el) return;
+    const keys = Object.keys(STATUS);
+    const counts = keys.map(k=>farmers.filter(f=>f.status===k).length);
+    const total = Math.max(1, farmers.length);
+    const R=42, C=2*Math.PI*R;
+    let offset=0;
+    const segs = keys.map((k,idx)=>{
+      const n = counts[idx];
+      const frac = n/total;
+      const dash = frac*C;
+      const seg = `<circle r="${R}" cx="60" cy="60" fill="transparent" stroke="${STATUS_COLOR[k]}" stroke-width="16" stroke-dasharray="${dash} ${C-dash}" stroke-dashoffset="${-offset}" transform="rotate(-90 60 60)"/>`;
+      offset += dash;
+      return seg;
+    }).join("");
+    el.innerHTML = `<svg viewBox="0 0 120 120" width="120" height="120">${segs}<circle r="26" cx="60" cy="60" fill="var(--paper)"/><text x="60" y="55" text-anchor="middle" font-size="20" font-weight="700" fill="var(--soil)">${farmers.length}</text><text x="60" y="70" text-anchor="middle" font-size="9" fill="var(--soil-2)">farmers</text></svg>`;
+    $("#status-legend").innerHTML = keys.map((k,idx)=>`<li><span class="sw" style="background:${STATUS_COLOR[k]}"></span>${STATUS[k].label}<span class="n">${counts[idx]}</span></li>`).join("");
+  }
+
+  function renderTrendChart(ix){
+    const el = $("#trend-chart"); if(!el) return;
+    const months = [];
+    const now = new Date();
+    for(let i=5;i>=0;i--){
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({key: d.toISOString().slice(0,7), label: d.toLocaleDateString("en-GB",{month:"short"})});
+    }
+    const counts = months.map(m => ix.filter(i=>i.date.startsWith(m.key)).length);
+    const max = Math.max(1, ...counts);
+    const w=280,h=110,bw=32,gap=14,base=90;
+    const bars = counts.map((n,idx)=>{
+      const bh = Math.round((n/max)*70);
+      const x = 10 + idx*(bw+gap);
+      return `<rect x="${x}" y="${base-bh}" width="${bw}" height="${bh}" rx="4" fill="var(--leaf)"/><text x="${x+bw/2}" y="${base-bh-6}" text-anchor="middle" font-size="11" font-weight="700" fill="var(--soil)">${n}</text><text x="${x+bw/2}" y="${base+16}" text-anchor="middle" font-size="10" fill="var(--soil-2)">${months[idx].label}</text>`;
+    }).join("");
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" class="trendchart">${bars}</svg>`;
+  }
+  function renderGrowthChart(farmers){
+    const el = $("#growth-chart"); if(!el) return;
+    const months = [];
+    const now = new Date();
+    for(let i=5;i>=0;i--){
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({key: d.toISOString().slice(0,7), label: d.toLocaleDateString("en-GB",{month:"short"})});
+    }
+    let running = 0;
+    const cumulative = months.map(m => {
+      running += farmers.filter(f=>(f.joined||"").startsWith(m.key)).length;
+      return running;
+    });
+    const max = Math.max(1, ...cumulative);
+    const w=280, h=110, left=10, right=270, top=14, base=90;
+    const stepX = (right-left) / Math.max(1, cumulative.length-1);
+    const pts = cumulative.map((n,idx)=>{
+      const x = left + idx*stepX;
+      const y = base - (n/max)*(base-top);
+      return {x,y,n};
+    });
+    const path = pts.map((p,i)=> (i===0?"M":"L") + p.x.toFixed(1) + " " + p.y.toFixed(1)).join(" ");
+    const area = path + ` L${pts[pts.length-1].x.toFixed(1)} ${base} L${pts[0].x.toFixed(1)} ${base} Z`;
+    const dots = pts.map((p,idx)=>`<circle cx="${p.x.toFixed(1)}" cy="${p.y.toFixed(1)}" r="3" fill="var(--field)"/><text x="${p.x.toFixed(1)}" y="${(p.y-8).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="var(--soil)">${p.n}</text><text x="${p.x.toFixed(1)}" y="${base+16}" text-anchor="middle" font-size="10" fill="var(--soil-2)">${months[idx].label}</text>`).join("");
+    el.innerHTML = `<svg viewBox="0 0 ${w} ${h}" width="100%" height="${h}" class="trendchart">
+      <path d="${area}" fill="var(--leaf)" opacity="0.15"/>
+      <path d="${path}" fill="none" stroke="var(--field)" stroke-width="2"/>
+      ${dots}
+    </svg>`;
+  }
+
+  function fallbackPortfolioInsights(f, ix, toolCounts){
+    const dormant = f.filter(x=>x.status==="dormant");
+    const leads = f.filter(x=>x.status==="lead");
+    const topTool = Object.keys(toolCounts).sort((a,b)=>toolCounts[b]-toolCounts[a])[0];
+    const summary = `Across ${f.length} farmers and ${ix.length} logged interactions, ${TOOLS[topTool]?TOOLS[topTool].label:topTool} is the most-used tool. ${leads.length} farmer(s) are qualified leads and ${dormant.length} are currently dormant.`;
+    const highlights = [
+      dormant.length ? `Re-engage ${dormant.length} dormant farmer(s), starting with ${dormant[0].name}.` : "No dormant farmers right now - engagement is holding up well.",
+      leads.length ? `Follow up on ${leads.length} qualified lead(s) for potential dealer hand-off.` : "No qualified leads waiting on follow-up at the moment.",
+      `${TOOLS[topTool]?TOOLS[topTool].label:topTool} is driving the most usage - consider it a template for promoting the other tools.`,
+    ];
+    return { summary, highlights };
+  }
+  async function runPortfolioInsights(){
+    const f = DB.farmers, ix = DB.interactions;
+    if(!f.length){ alert("Add some farmers first."); return; }
+    $("#pi-btn").disabled = true;
+    const toolCounts = {};
+    Object.keys(TOOLS).forEach(k=>toolCounts[k]=ix.filter(i=>i.tool===k).length);
+    const fb = fallbackPortfolioInsights(f, ix, toolCounts);
+    $("#pi-body").style.display = "block";
+    setHTML("pi-body", `<p>${esc(fb.summary)}</p><ul class="hl">${fb.highlights.map(h=>`<li>${esc(h)}</li>`).join("")}</ul>`);
+    showRefining("pi-body");
+    try{
+      const roster = f.map(x=>`${x.name} (${x.status}, ${x.crop}, ${x.region}, ${ixFor(x.id).length} interactions)`).join("; ");
+      const sys = sysPrefix() + 'Schema: {"summary":string,"highlights":[string,string,string]}';
+      const user = `Portfolio of ${f.length} farmers on Agronome: ${roster}.\nTool usage counts: ${JSON.stringify(toolCounts)}.\nTotal interactions: ${ix.length}.\nWrite a short strategic summary of how this farmer portfolio is doing (adoption, engagement, standout crops or regions), then 3 short highlight/action bullets a customer-success manager should act on (e.g. dormant farmers to re-engage, leads to convert, most-used tool).`;
+      const raw = await askAI(sys, user);
+      const d = parseAIJSON(raw);
+      clearRefining("pi-body");
+      setHTML("pi-body", `<p>${esc(d.summary||"")}</p>` + (d.highlights&&d.highlights.length ? `<ul class="hl">${d.highlights.map(h=>`<li>${esc(h)}</li>`).join("")}</ul>` : ""));
+    }catch(e){ console.error(e); clearRefining("pi-body"); }
+    $("#pi-btn").disabled = false;
+  }
+
+  /* ---------- CRM: export ---------- */
+  function downloadBlob(filename, text, mime){
+    const blob = new Blob([text], {type: mime||"text/plain"});
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = filename;
+    document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    setTimeout(()=>URL.revokeObjectURL(url), 2000);
+  }
+  function exportFarmerReport(id){
+    const f = DB.farmers.find(x=>x.id===id); if(!f) return;
+    const s = STATUS[f.status];
+    const ix = ixFor(id);
+    let lines = [];
+    lines.push("AGRONOME - FARMER REPORT");
+    lines.push("=".repeat(44));
+    lines.push(`Name: ${f.name}  (${f.id})`);
+    lines.push(`Status: ${s.label}`);
+    lines.push(`Region: ${f.region}`);
+    lines.push(`Crop: ${f.crop}   Farm size: ${f.size}`);
+    lines.push(`Soil: ${f.soil}`);
+    lines.push(`Water source: ${f.water}`);
+    lines.push(`Phone: ${f.phone}`);
+    lines.push(`On Copilot since: ${fmtDate(f.joined)}`);
+    lines.push("");
+    lines.push(`ADVICE HISTORY (${ix.length} interactions)`);
+    lines.push("-".repeat(44));
+    ix.forEach(i=>{ lines.push(`${fmtDate(i.date)}  [${TOOLS[i.tool].label}]${i.quality?" ("+i.quality+"/5)":""}\n  ${i.detail}\n`); });
+    downloadBlob(`${f.name.replace(/\s+/g,"_")}_report.txt`, lines.join("\n"), "text/plain");
+  }
+  function csvEscape(v){ const s=String(v==null?"":v); return /[",\n]/.test(s) ? '"'+s.replace(/"/g,'""')+'"' : s; }
+  function exportLogCSV(){
+    const q = ($("#l-search").value||"").toLowerCase();
+    const tf = $("#l-tool").value;
+    const rows = DB.interactions.filter(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:""};
+      const okq = !q || (farmer.name+i.detail).toLowerCase().includes(q);
+      const okt = !tf || i.tool===tf;
+      return okq && okt;
+    });
+    const header = ["Date","Farmer","Farmer ID","Tool","Detail","Quality"];
+    const lines = [header.join(",")];
+    rows.forEach(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:"Unknown",id:""};
+      lines.push([fmtDate(i.date), farmer.name, farmer.id, TOOLS[i.tool].label, i.detail, i.quality||""].map(csvEscape).join(","));
+    });
+    downloadBlob("agronome_interaction_log.csv", lines.join("\n"), "text/csv");
+  }
+  function exportFarmersCSV(){
+    const header = ["Farmer ID","Name","Region","Crop","Farm size","Soil","Water","Phone","Status","Joined","Interactions","Last seen"];
+    const lines = [header.join(",")];
+    DB.farmers.forEach(f=>{
+      const ls = lastSeen(f.id);
+      lines.push([f.id,f.name,f.region,f.crop,f.size,f.soil,f.water,f.phone,STATUS[f.status].label,fmtDate(f.joined),ixFor(f.id).length, ls?fmtDate(ls):""].map(csvEscape).join(","));
+    });
+    downloadBlob("agronome_farmers.csv", lines.join("\n"), "text/csv");
+  }
+
+  /* ---------- PDF export (via browser print) ---------- */
+  function printHeader(title){
+    const now = new Date().toLocaleDateString("en-GB",{day:"numeric",month:"long",year:"numeric"});
+    return `<div class="pr-header"><div class="pr-brand">Agronome</div><div class="pr-meta">${esc(title)} · Generated ${now}</div></div>`;
+  }
+  function printFooter(){
+    return `<div class="pr-footer">Agronome - generated report. For internal use.</div>`;
+  }
+  function doPrint(html){
+    setHTML("print-area", html);
+    setTimeout(()=>window.print(), 50);
+  }
+  function printFarmerReport(id){
+    const f = DB.farmers.find(x=>x.id===id); if(!f) return;
+    const s = STATUS[f.status];
+    const ix = ixFor(id);
+    const kv = `<table class="pr-kv">
+      <tr><td>Farmer ID</td><td>${esc(f.id)}</td></tr>
+      <tr><td>Status</td><td>${esc(s.label)}</td></tr>
+      <tr><td>Region</td><td>${esc(f.region)}</td></tr>
+      <tr><td>Crop</td><td>${esc(f.crop)}</td></tr>
+      <tr><td>Farm size</td><td>${esc(f.size)}</td></tr>
+      <tr><td>Soil type</td><td>${esc(f.soil)}</td></tr>
+      <tr><td>Water source</td><td>${esc(f.water)}</td></tr>
+      <tr><td>Phone</td><td>${esc(f.phone)}</td></tr>
+      <tr><td>On Agronome since</td><td>${esc(fmtDate(f.joined))}</td></tr>
+    </table>`;
+    const rows = ix.map(i=>`<tr><td>${esc(fmtDate(i.date))}</td><td>${esc(TOOLS[i.tool].label)}</td><td>${esc(i.detail)}</td><td>${i.quality?i.quality+"/5":" - "}</td></tr>`).join("");
+    const table = `<table class="pr-table"><thead><tr><th>Date</th><th>Tool</th><th>What was advised</th><th>Rating</th></tr></thead><tbody>${rows||'<tr><td colspan="4">No interactions logged yet.</td></tr>'}</tbody></table>`;
+    doPrint(printHeader(f.name+" - Farmer Report") + kv + `<div class="pr-title">Advice history (${ix.length})</div>` + table + printFooter());
+  }
+  function printFarmersList(){
+    const q = ($("#f-search").value||"").toLowerCase();
+    const sf = $("#f-status").value;
+    const rows = DB.farmers.filter(f=>{
+      const okq = !q || (f.name+f.region+f.crop).toLowerCase().includes(q);
+      const oks = !sf || f.status===sf;
+      return okq && oks;
+    });
+    const body = rows.map(f=>{
+      const ls = lastSeen(f.id);
+      return `<tr><td>${esc(f.name)}</td><td>${esc(f.region)}</td><td>${esc(f.crop)}</td><td>${ixFor(f.id).length}</td><td>${ls?esc(fmtDate(ls)):" - "}</td><td>${esc(STATUS[f.status].label)}</td></tr>`;
+    }).join("");
+    const table = `<table class="pr-table"><thead><tr><th>Farmer</th><th>Region</th><th>Crop</th><th>Interactions</th><th>Last seen</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="6">No farmers match the current filters.</td></tr>'}</tbody></table>`;
+    doPrint(printHeader(`Farmer Directory (${rows.length} of ${DB.farmers.length})`) + table + printFooter());
+  }
+  function printLog(){
+    const q = ($("#l-search").value||"").toLowerCase();
+    const tf = $("#l-tool").value;
+    const rows = DB.interactions.filter(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:""};
+      const okq = !q || (farmer.name+i.detail).toLowerCase().includes(q);
+      const okt = !tf || i.tool===tf;
+      return okq && okt;
+    }).sort((a,b)=>b.date.localeCompare(a.date));
+    const body = rows.map(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:"Unknown"};
+      return `<tr><td>${esc(fmtDate(i.date))}</td><td>${esc(farmer.name)}</td><td>${esc(TOOLS[i.tool].label)}</td><td>${esc(i.detail)}</td><td>${i.quality?i.quality+"/5":" - "}</td></tr>`;
+    }).join("");
+    const table = `<table class="pr-table"><thead><tr><th>Date</th><th>Farmer</th><th>Tool</th><th>What was advised</th><th>Rating</th></tr></thead><tbody>${body||'<tr><td colspan="5">No interactions match the current filters.</td></tr>'}</tbody></table>`;
+    doPrint(printHeader(`Interaction Log (${rows.length} of ${DB.interactions.length})`) + table + printFooter());
+  }
+  function printDashboard(){
+    const f = DB.farmers, ix = DB.interactions;
+    const leads = f.filter(x=>x.status==="lead").length;
+    const active = f.filter(x=>x.status==="active"||x.status==="lead").length;
+    const dormant = f.filter(x=>x.status==="dormant").length;
+    const rated = ix.filter(i=>i.quality);
+    const avgQ = rated.length ? (rated.reduce((s,i)=>s+i.quality,0)/rated.length).toFixed(1) : "-";
+    const kv = `<table class="pr-kv">
+      <tr><td>Farmers tracked</td><td>${f.length}</td></tr>
+      <tr><td>Total interactions</td><td>${ix.length}</td></tr>
+      <tr><td>Active farmers</td><td>${active}</td></tr>
+      <tr><td>Qualified leads</td><td>${leads}</td></tr>
+      <tr><td>Dormant farmers</td><td>${dormant}</td></tr>
+      <tr><td>Average rating</td><td>${avgQ}${rated.length?"/5":""}</td></tr>
+    </table>`;
+    const toolCounts = {};
+    Object.keys(TOOLS).forEach(k=>toolCounts[k]=ix.filter(i=>i.tool===k).length);
+    const toolRows = Object.keys(TOOLS).map(k=>`<tr><td>${esc(TOOLS[k].label)}</td><td>${toolCounts[k]}</td></tr>`).join("");
+    const toolTable = `<table class="pr-table"><thead><tr><th>Tool</th><th>Times used</th></tr></thead><tbody>${toolRows}</tbody></table>`;
+    const recent = [...ix].sort((a,b)=>b.date.localeCompare(a.date)).slice(0,10);
+    const recentRows = recent.map(i=>{
+      const farmer = f.find(x=>x.id===i.farmerId) || {name:"Unknown"};
+      return `<tr><td>${esc(fmtDate(i.date))}</td><td>${esc(farmer.name)}</td><td>${esc(TOOLS[i.tool].label)}</td><td>${esc(i.detail)}</td></tr>`;
+    }).join("");
+    const recentTable = `<table class="pr-table"><thead><tr><th>Date</th><th>Farmer</th><th>Tool</th><th>Detail</th></tr></thead><tbody>${recentRows||'<tr><td colspan="4">No activity yet.</td></tr>'}</tbody></table>`;
+    const months = [];
+    const now = new Date();
+    for(let i=5;i>=0;i--){
+      const d = new Date(now.getFullYear(), now.getMonth()-i, 1);
+      months.push({key: d.toISOString().slice(0,7), label: d.toLocaleDateString("en-GB",{month:"long",year:"numeric"})});
+    }
+    let running = 0;
+    const growthRows = months.map(m => {
+      running += f.filter(x=>(x.joined||"").startsWith(m.key)).length;
+      return `<tr><td>${esc(m.label)}</td><td>${running}</td></tr>`;
+    }).join("");
+    const growthTable = `<table class="pr-table"><thead><tr><th>Month</th><th>Cumulative farmers</th></tr></thead><tbody>${growthRows}</tbody></table>`;
+    doPrint(printHeader("Field Office Overview") + kv +
+      `<div class="pr-title">Farmer growth</div>` + growthTable +
+      `<div class="pr-title">Tool usage</div>` + toolTable +
+      `<div class="pr-title">Recent activity (last 10)</div>` + recentTable + printFooter());
+  }
+  function printToolResult(tool){
+    const titles = {crop:"Crop Recommendation", fertilizer:"Fertilizer Plan", profit:"Profit Forecast", disease:"Disease Diagnosis", weather:"Weather Advice", compare:"Crop Comparison"};
+    let content = "";
+    if(tool==="profit"){
+      const stats = $("#pf_stats"); const text = $("#pf_text");
+      content = (stats?stats.innerHTML:"") + (text?text.innerHTML:"");
+    } else {
+      const idMap = {crop:"cr_text", fertilizer:"ft_text", disease:"dis_text", weather:"wt_text", compare:"cmp_text"};
+      const el = $("#"+idMap[tool]);
+      content = el ? el.innerHTML : "";
+    }
+    content = content.replace(/<div class="refine-badge">[\s\S]*?<\/div>/,"");
+    const who = currentFarmerId ? (DB.farmers.find(f=>f.id===currentFarmerId)||{}).name : null;
+    doPrint(printHeader(titles[tool] + (who ? (" for "+who) : "")) + `<div class="pr-title">${esc(titles[tool])}</div>` + content + printFooter());
+  }
+
+  /* ---------- CRM: farmers table ---------- */
+  function sortFarmers(field){
+    if(farmersSort.field===field) farmersSort.dir *= -1; else farmersSort = {field, dir:1};
+    renderFarmers();
+  }
+  function sortArrow(current, field, dir){ return current===field ? (dir===1?"&#9650;":"&#9660;") : ""; }
+  function renderFarmers(){
+    const q = ($("#f-search").value||"").toLowerCase();
+    const sf = $("#f-status").value;
+    let rows = DB.farmers.filter(f=>{
+      const okq = !q || (f.name+f.region+f.crop).toLowerCase().includes(q);
+      const oks = !sf || f.status===sf;
+      return okq && oks;
+    });
+    const {field, dir} = farmersSort;
+    rows = rows.slice().sort((a,b)=>{
+      let av, bv;
+      if(field==="interactions"){ av=ixFor(a.id).length; bv=ixFor(b.id).length; }
+      else if(field==="lastSeen"){ av=lastSeen(a.id)||""; bv=lastSeen(b.id)||""; }
+      else { av=(a[field]||"").toString().toLowerCase(); bv=(b[field]||"").toString().toLowerCase(); }
+      return av<bv ? -1*dir : av>bv ? 1*dir : 0;
+    });
+    const body = $("#farmers-body");
+    $$("#crmview-farmers th.sortable").forEach(th=>{ th.querySelector(".arrow").innerHTML = sortArrow(field, th.dataset.field, dir); });
+    if(!rows.length){ body.innerHTML = `<tr><td colspan="6" class="empty">No farmers match your filters.</td></tr>`; return; }
+    body.innerHTML = rows.map(f=>{
+      const s = STATUS[f.status]; const ls = lastSeen(f.id);
+      return `<tr class="clickable" data-id="${f.id}">
+        <td><div class="who-cell"><span class="avatar">${initials(f.name)}</span>
+          <div><div style="font-weight:600">${esc(f.name)}</div><div class="muted" style="font-size:11.5px">${f.id}</div></div></div></td>
+        <td>${esc(f.region)}</td>
+        <td>${esc(f.crop)} <span class="muted">· ${esc(f.size)}</span></td>
+        <td>${ixFor(f.id).length}</td>
+        <td>${ls?fmtDate(ls):'<span class="muted"> - </span>'}</td>
+        <td><span class="pill ${s.cls}">${s.label}</span></td>
+      </tr>`;
+    }).join("");
+    $$("tr.clickable", body).forEach(tr=>tr.onclick=()=>openDrawer(tr.dataset.id));
+  }
+
+  /* ---------- CRM: interaction log ---------- */
+  function sortLog(field){
+    if(logSort.field===field) logSort.dir *= -1; else logSort = {field, dir:1};
+    renderLog();
+  }
+  function renderLog(){
+    const q = ($("#l-search").value||"").toLowerCase();
+    const tf = $("#l-tool").value;
+    let rows = DB.interactions.filter(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:""};
+      const okq = !q || (farmer.name+i.detail).toLowerCase().includes(q);
+      const okt = !tf || i.tool===tf;
+      return okq && okt;
+    });
+    const {field, dir} = logSort;
+    rows = rows.sort((a,b)=>{
+      let av, bv;
+      if(field==="farmer"){ av=(DB.farmers.find(x=>x.id===a.farmerId)||{}).name||""; bv=(DB.farmers.find(x=>x.id===b.farmerId)||{}).name||""; }
+      else if(field==="tool"){ av=TOOLS[a.tool].label; bv=TOOLS[b.tool].label; }
+      else if(field==="quality"){ av=a.quality||0; bv=b.quality||0; }
+      else { av=a.date; bv=b.date; }
+      return av<bv ? -1*dir : av>bv ? 1*dir : 0;
+    });
+    const body = $("#log-body");
+    $$("#crmview-log th.sortable").forEach(th=>{ th.querySelector(".arrow").innerHTML = sortArrow(field, th.dataset.field, dir); });
+    if(!rows.length){ body.innerHTML = `<tr><td colspan="5" class="empty">No interactions match your filters.</td></tr>`; return; }
+    body.innerHTML = rows.map(i=>{
+      const farmer = DB.farmers.find(x=>x.id===i.farmerId) || {name:"Unknown"};
+      return `<tr>
+        <td>${fmtDate(i.date)}</td>
+        <td>${esc(farmer.name)}</td>
+        <td><span class="tool-tag">${TOOLS[i.tool].icon} ${TOOLS[i.tool].label}</span></td>
+        <td class="muted">${esc(i.detail)}</td>
+        <td>${i.quality?("★".repeat(i.quality)+'<span class="muted">'+"☆".repeat(5-i.quality)+"</span>"):'<span class="muted"> - </span>'}</td>
+      </tr>`;
+    }).join("");
+  }
+
+  /* ---------- CRM: drawer ---------- */
+  function openDrawer(id){
+    const f = DB.farmers.find(x=>x.id===id); if(!f) return;
+    const s = STATUS[f.status];
+    $("#d-name").textContent = f.name;
+    $("#d-farm").textContent = `${f.crop} · ${f.size} · ${f.region}`;
+    $("#d-kv").innerHTML = `
+      <dt>Farmer ID</dt><dd>${f.id}</dd>
+      <dt>Status</dt><dd><span class="pill ${s.cls}">${s.label}</span></dd>
+      <dt>Phone</dt><dd>${esc(f.phone)}</dd>
+      <dt>Soil type</dt><dd>${esc(f.soil)}</dd>
+      <dt>Water source</dt><dd>${esc(f.water)}</dd>
+      <dt>On Copilot since</dt><dd>${fmtDate(f.joined)}</dd>
+      <dt>Total advice given</dt><dd>${ixFor(f.id).length} interactions</dd>`;
+    const ix = ixFor(f.id);
+    $("#d-timeline").innerHTML = ix.length ? ix.map(i=>`
+      <li><span class="dot"></span>
+        <div class="t-tool">${TOOLS[i.tool].icon} ${TOOLS[i.tool].label}</div>
+        <div class="t-date">${fmtDate(i.date)}</div>
+        <div class="t-detail">${esc(i.detail)}</div>
+      </li>`).join("") : `<li class="muted">No interactions logged yet.</li>`;
+    $("#scrim").classList.add("show"); $("#drawer").classList.add("show");
+    $("#log-add-for").value = id;
+  }
+  function closeDrawer(){ $("#scrim").classList.remove("show"); $("#drawer").classList.remove("show"); }
+
+  /* ---------- CRM: modals ---------- */
+  function showToast(msg){
+    let t = $("#fc-toast");
+    if(!t){
+      t = document.createElement("div");
+      t.id = "fc-toast";
+      t.className = "fc-toast";
+      t.setAttribute("role", "status");
+      t.setAttribute("aria-live", "polite");
+      document.body.appendChild(t);
+    }
+    t.textContent = msg;
+    t.classList.add("show");
+    clearTimeout(t._hideTimer);
+    t._hideTimer = setTimeout(()=>t.classList.remove("show"), 2600);
+  }
+  function openFarmerModal(){
+    $("#nf-editing-id").value = "";
+    $("#fm-title").textContent = "Add farmer";
+    ["nf-name","nf-region","nf-crop","nf-size","nf-soil","nf-water","nf-phone"].forEach(i=>$("#"+i).value="");
+    $("#nf-status").value = "new";
+    $("#farmer-modal").classList.add("show");
+  }
+  function openEditFarmerModal(id){
+    const f = DB.farmers.find(x=>x.id===id); if(!f) return;
+    $("#nf-editing-id").value = id;
+    $("#fm-title").textContent = "Edit farmer";
+    $("#nf-name").value = f.name;
+    $("#nf-region").value = f.region;
+    $("#nf-crop").value = f.crop;
+    $("#nf-size").value = f.size;
+    $("#nf-soil").value = f.soil;
+    $("#nf-water").value = f.water;
+    $("#nf-phone").value = f.phone;
+    $("#nf-status").value = f.status;
+    $("#farmer-modal").classList.add("show");
+  }
+  function openLogModal(presetId){
+    const sel = $("#lg-farmer");
+    sel.innerHTML = DB.farmers.map(f=>`<option value="${f.id}">${esc(f.name)} (${f.id})</option>`).join("");
+    if(presetId) sel.value = presetId;
+    $("#lg-date").value = todayISO();
+    $("#log-modal").classList.add("show");
+  }
+  function closeModals(){ $$(".modal").forEach(m=>m.classList.remove("show")); }
+
+  async function addFarmer(){
+    const name = $("#nf-name").value.trim();
+    if(!name){ $("#nf-name").focus(); return; }
+    const editingId = $("#nf-editing-id").value;
+    const fields = {
+      name,
+      region: $("#nf-region").value.trim() || " - ",
+      crop: $("#nf-crop").value.trim() || " - ",
+      size: $("#nf-size").value.trim() || " - ",
+      soil: $("#nf-soil").value.trim() || " - ",
+      water: $("#nf-water").value.trim() || " - ",
+      phone: $("#nf-phone").value.trim() || " - ",
+      status: $("#nf-status").value,
+    };
+    let id = editingId;
+    if(editingId){
+      const f = DB.farmers.find(x=>x.id===editingId);
+      if(f) Object.assign(f, fields);
+    } else {
+      id = "F-"+(1048+DB.farmers.length);
+      DB.farmers.push({ id, ...fields, joined: todayISO() });
+    }
+    await save();
+    ["nf-name","nf-region","nf-crop","nf-size","nf-soil","nf-water","nf-phone"].forEach(i=>$("#"+i).value="");
+    closeModals(); renderFarmers(); renderDash(); populateFarmerSelect();
+    if(editingId){ showToast("Farmer updated."); if($("#drawer").classList.contains("show")) openDrawer(editingId); }
+    else { currentFarmerId = id; $("#ctx-farmer").value = id; renderCtxHint(); showToast("Farmer added."); }
+  }
+  async function deleteFarmer(id){
+    const f = DB.farmers.find(x=>x.id===id); if(!f) return;
+    if(!confirm(`Delete ${f.name}? This will also remove their ${ixFor(id).length} logged interaction(s). This cannot be undone.`)) return;
+    DB.farmers = DB.farmers.filter(x=>x.id!==id);
+    DB.interactions = DB.interactions.filter(i=>i.farmerId!==id);
+    if(currentFarmerId === id) currentFarmerId = null;
+    await save();
+    closeDrawer();
+    renderFarmers(); renderDash(); renderLog(); populateFarmerSelect(); renderCtxHint();
+    showToast(`${f.name} was deleted.`);
+  }
+  async function addLog(){
+    const farmerId = $("#lg-farmer").value;
+    const detail = $("#lg-detail").value.trim();
+    if(!detail){ $("#lg-detail").focus(); return; }
+    const q = $("#lg-quality").value;
+    DB.interactions.push({ id:"IX-"+(2000+DB.interactions.length), farmerId, tool:$("#lg-tool").value, date:$("#lg-date").value||todayISO(), detail, quality:q?parseInt(q):null });
+    await save();
+    $("#lg-detail").value = "";
+    closeModals(); renderLog(); renderDash(); renderFarmers();
+    if($("#drawer").classList.contains("show")) openDrawer(farmerId);
+  }
+
+  /* ---------- farmer context bar (shared between Copilot + Field Office) ---------- */
+  function populateFarmerSelect(){
+    const sel = $("#ctx-farmer");
+    if(!sel) return;
+    const prev = sel.value;
+    sel.innerHTML = '<option value="">-- Guest / no farmer selected --</option>' +
+      DB.farmers.map(f=>`<option value="${f.id}">${esc(f.name)} (${f.id})</option>`).join("");
+    sel.value = prev || currentFarmerId || "";
+  }
+  function renderCtxHint(){
+    const hint = $("#ctx-hint");
+    if(!hint) return;
+    if(currentFarmerId){
+      const f = DB.farmers.find(x=>x.id===currentFarmerId);
+      hint.textContent = f ? `Advice will be logged to ${f.name}'s profile.` : "";
+    } else {
+      hint.textContent = "Results won't be saved to a farmer profile in guest mode.";
+    }
+  }
+
+  /* ---------- mode + tab switching ---------- */
+  function showMode(mode){
+    if(mode==="fieldoffice" && !$("#modebtn-fieldoffice")) return;
+    $$(".modepanel").forEach(v=>v.classList.remove("active"));
+    $$(".modeswitch button").forEach(b=>b.classList.remove("active"));
+    $("#mode-"+mode).classList.add("active");
+    const btn = $("#modebtn-"+mode); if(btn) btn.classList.add("active");
+    $("#copilot-nav").style.display = (mode==="copilot") ? "flex" : "none";
+    $("#crm-nav").style.display = (mode==="fieldoffice") ? "flex" : "none";
+    if(mode==="fieldoffice") showCRM("dash");
+    if(mode==="copilot") showTool("home");
+  }
+  function showTool(name){
+    $$("#mode-copilot .panel").forEach(p=>p.classList.remove("active"));
+    $$("#copilot-nav button").forEach(b=>b.classList.remove("active"));
+    $("#tool-"+name).classList.add("active");
+    $("#toolbtn-"+name).classList.add("active");
+    if(currentFarmerId) autofillForFarmer();
+  }
+  function showCRM(view){
+    $$("#mode-fieldoffice .view").forEach(v=>v.classList.remove("active"));
+    $$("#crm-nav button").forEach(b=>b.classList.remove("active"));
+    $("#crmview-"+view).classList.add("active");
+    $("#crmbtn-"+view).classList.add("active");
+    if(view==="dash") renderDash();
+    if(view==="farmers") renderFarmers();
+    if(view==="log") renderLog();
+  }
+
+  /* ---------- build shell ---------- */
+  function buildApp(){
+    const isFarmerSession = session && session.type === "farmer";
+    const isStaffSession = session && session.type === "staff";
+    $("#app").innerHTML = `
+    <header class="top">
+      <div class="brandrow">
+        <div class="sprout">🌾</div>
+        <div>
+          <h1>Agronome</h1>
+        </div>
+        <div class="modeswitch">
+          <button id="modebtn-copilot" class="active" onclick="FC.showMode('copilot')">🌱 Copilot</button>
+          ${isFarmerSession ? "" : `<button id="modebtn-fieldoffice" onclick="FC.showMode('fieldoffice')">📇 Field Office</button>`}
+        </div>
+        <button class="btn ghost tiny" id="theme-toggle-btn" style="margin-left:8px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:var(--wheat-soft)" onclick="FC.toggleTheme()"><span id="theme-icon">${theme==="dark"?"\u2600\uFE0F":"\uD83C\uDF19"}</span> <span id="theme-label">${theme==="dark"?"Light mode":"Dark mode"}</span></button>
+        <button class="btn ghost tiny" style="margin-left:8px;background:rgba(255,255,255,.1);border-color:rgba(255,255,255,.25);color:var(--wheat-soft)" onclick="FC.logout()">🚪 Log out${isStaffSession?" ("+esc(session.staffName)+")":""}</button>
+      </div>
+      <div class="lang-bar">
+        <span class="lang-lab">Live answers language</span>
+        <select id="lang-select" onchange="FC.setLanguage(this.value)">
+          ${LANGUAGES.map(l=>`<option value="${l}" ${l===language?"selected":""}>${l}</option>`).join("")}
+        </select>
+        <span style="opacity:.75;font-style:italic">(instant answers are always in English)</span>
+      </div>
+      <nav class="subnav" id="copilot-nav">
+        <button id="toolbtn-home" class="active" onclick="FC.showTool('home')">🏠 Home</button>
+        <button id="toolbtn-crop" onclick="FC.showTool('crop')">🌱 Crop advisor</button>
+        <button id="toolbtn-fertilizer" onclick="FC.showTool('fertilizer')">🪣 Fertilizer plan</button>
+        <button id="toolbtn-profit" onclick="FC.showTool('profit')">💰 Profit forecast</button>
+        <button id="toolbtn-disease" onclick="FC.showTool('disease')">🔍 Disease check</button>
+        <button id="toolbtn-weather" onclick="FC.showTool('weather')">🌤 Weather advice</button>
+        <button id="toolbtn-diary" onclick="FC.showTool('diary')">📓 Farm diary</button>
+      </nav>
+      <nav class="subnav" id="crm-nav" style="display:none">
+        <button id="crmbtn-dash" class="active" onclick="FC.showCRM('dash')">Dashboard</button>
+        <button id="crmbtn-farmers" onclick="FC.showCRM('farmers')">Farmers</button>
+        <button id="crmbtn-log" onclick="FC.showCRM('log')">Interaction Log</button>
+      </nav>
+    </header>
+
+    ${isFarmerSession ? `
+    <div class="ctxbar">
+      <span class="lab">Logged in as</span>
+      <span style="font-weight:700;color:var(--field-deep)">${esc((DB.farmers.find(f=>f.id===session.farmerId)||{}).name||"Farmer")}</span>
+      <span class="hint">Your advice history is saved to your own profile.</span>
+    </div>` : `
+    <div class="ctxbar">
+      <span class="lab">Working with</span>
+      <select id="ctx-farmer" onchange="FC.onCtxChange()"></select>
+      <button class="btn ghost tiny" onclick="FC.openFarmerModal()">+ New farmer</button>
+      <span class="hint" id="ctx-hint"></span>
+    </div>`}
+
+    <main>
+      <!-- ============ COPILOT MODE ============ -->
+      <div id="mode-copilot" class="modepanel active">
+
+        <section class="panel active" id="tool-home">
+          <div class="home-hero">
+            <div class="home-hero-tag">Agronome</div>
+            <div class="home-hero-title">Your personal farming expert.<br>Always in your pocket.</div>
+            <div class="home-hero-desc">Tell us about your farm - soil, crop, weather, problems. We generate personalised advice in simple words, and every answer is saved to the farmer's profile in the Field Office.</div>
+          </div>
+          <div class="tool-grid">
+            <div class="tool-card" onclick="FC.showTool('crop')"><div class="tool-icon">🌱</div><div class="tool-name">What crop should I grow?</div><div class="tool-desc">We pick the best 3 crops for your soil, water, and local market</div><div class="tool-arrow">Use this tool →</div></div>
+            <div class="tool-card" onclick="FC.showTool('fertilizer')"><div class="tool-icon">🪣</div><div class="tool-name">What fertilizer do I need?</div><div class="tool-desc">Week-by-week fertilizer plan in plain words - no jargon</div><div class="tool-arrow">Use this tool →</div></div>
+            <div class="tool-card" onclick="FC.showTool('profit')"><div class="tool-icon">💰</div><div class="tool-name">How much profit will I make?</div><div class="tool-desc">Full cost breakdown and net profit forecast for your crop</div><div class="tool-arrow">Use this tool →</div></div>
+            <div class="tool-card" onclick="FC.showTool('disease')"><div class="tool-icon">🔍</div><div class="tool-name">My plant looks sick - what is it?</div><div class="tool-desc">Describe the symptoms - get a diagnosis and treatment plan</div><div class="tool-arrow">Use this tool →</div></div>
+            <div class="tool-card" onclick="FC.showTool('weather')"><div class="tool-icon">🌤</div><div class="tool-name">Should I irrigate today?</div><div class="tool-desc">Weather-based advice - when to water, plant, spray, or wait</div><div class="tool-arrow">Use this tool →</div></div>
+            <div class="tool-card" onclick="FC.showTool('diary')"><div class="tool-icon">📓</div><div class="tool-name">My farm diary</div><div class="tool-desc">Log daily activities - get a weekly summary</div><div class="tool-arrow">Use this tool →</div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-crop">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">🌱</div><div><div class="toolcard-title">Crop recommendation engine</div><div class="toolcard-sub">Tell us about your farm - we recommend your best 3 crops to grow</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="cr_loc">Your region / location</label><select id="cr_loc"><option value="">-- select region --</option><option>North India (Punjab, Haryana, UP)</option><option>South India (Karnataka, AP, Tamil Nadu)</option><option>West India (Maharashtra, Gujarat)</option><option>East India (West Bengal, Bihar)</option><option>US Midwest (Iowa, Illinois, Indiana)</option><option>US South (Texas, Georgia)</option><option>Brazil (Mato Grosso, Parana)</option><option>Australia (Queensland, NSW)</option><option>UK and Ireland</option><option>East Africa (Kenya, Tanzania, Uganda)</option><option>West Africa (Nigeria, Ghana)</option><option>Southeast Asia (Vietnam, Thailand, Philippines)</option></select></div>
+              <div class="field"><label for="cr_soil">Soil type</label><select id="cr_soil"><option value="">-- select soil --</option><option>Clay soil (hard and sticky when wet)</option><option>Sandy soil (loose, drains very fast)</option><option>Loamy soil (dark, soft and fertile)</option><option>Black cotton soil (vertisol, cracks when dry)</option><option>Red laterite soil (reddish, slightly acidic)</option><option>Silty soil (smooth silky feel)</option></select></div>
+            </div>
+            <div class="field-grid">
+              <div class="field"><label for="cr_water">Water and irrigation available</label><select id="cr_water"><option value="">-- select water source --</option><option>Rain only - no irrigation</option><option>Limited borewell - not always available</option><option>Good borewell - reliable supply</option><option>Canal or river irrigation</option><option>Drip irrigation system installed</option></select></div>
+              <div class="field"><label for="cr_budget">Your farming budget (per acre)</label><select id="cr_budget"><option value="">-- select budget --</option><option>Very low - under \$100 per acre</option><option>Low - \$100 to \$300 per acre</option><option>Medium - \$300 to \$700 per acre</option><option>High - above \$700 per acre</option></select></div>
+            </div>
+            <div class="field"><label for="cr_market">Nearest market for selling your produce</label><select id="cr_market"><option value="">-- select market --</option><option>Local village market</option><option>City wholesale market</option><option>Export / international buyers</option><option>Food processing factory nearby</option><option>Supermarket or retail chain</option></select></div>
+            <button class="btn primary" id="cr_btn" onclick="FC.runCrop()">✨ Recommend my best crops</button>
+            <div class="result-box" id="cr_result" aria-live="polite"><div class="result-tag">Your top 3 recommended crops</div><div class="result-text" id="cr_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('cr_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('cr_text','Crop Recommendation')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('crop')">Print / Save as PDF</button></div></div>
+          </div>
+
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">⚖️</div><div><div class="toolcard-title">Compare two crops</div><div class="toolcard-sub">Weighing up two options? See them side by side</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="cmp_a">Crop A</label><select id="cmp_a"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Onion</option><option>Sugarcane</option></select></div>
+              <div class="field"><label for="cmp_b">Crop B</label><select id="cmp_b"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Onion</option><option>Sugarcane</option></select></div>
+            </div>
+            <div class="field"><label for="cmp_acres">Farm size (for the comparison)</label><select id="cmp_acres"><option value="1">1 acre</option><option value="2" selected>2 acres</option><option value="5">5 acres</option><option value="10">10 acres</option></select></div>
+            <button class="btn primary" id="cmp_btn" onclick="FC.runCompare()">⚖️ Compare these crops</button>
+            <div class="result-box" id="cmp_result" aria-live="polite"><div class="result-tag">Side-by-side comparison</div><div id="cmp_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('cmp_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('cmp_text','Crop Comparison')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('compare')">Print / Save as PDF</button></div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-fertilizer">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">🪣</div><div><div class="toolcard-title">Fertilizer planner</div><div class="toolcard-sub">Get a personalised week-by-week fertilizer schedule in simple words</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="ft_soil">Soil type</label><select id="ft_soil"><option value="">-- select --</option><option>Clay soil (hard, sticky when wet, cracks when dry)</option><option>Sandy soil (loose, drains very fast, low nutrients)</option><option>Loamy soil (dark, soft, good drainage and nutrients)</option><option>Black cotton soil (vertisol, holds water, high clay)</option><option>Red laterite soil (reddish, acidic, low phosphorus)</option></select></div>
+              <div class="field"><label for="ft_crop">Crop to grow</label><select id="ft_crop"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Onion</option><option>Sugarcane</option><option>Groundnut / peanut</option><option>Mustard / canola</option><option>Chilli / pepper</option></select></div>
+            </div>
+            <div class="field-grid">
+              <div class="field"><label for="ft_rain">Rainfall level in your area</label><select id="ft_rain"><option value="">-- select --</option><option>Very low - dry area, almost no rain</option><option>Low - less than 600mm per year</option><option>Medium - normal 600 to 1200mm per year</option><option>High - more than 1200mm, very rainy</option></select></div>
+              <div class="field"><label for="ft_season">Current farming season</label><select id="ft_season"><option value="">-- select --</option><option>Kharif / monsoon season (June to October)</option><option>Rabi / winter season (November to March)</option><option>Summer / hot dry season</option><option>Year-round with irrigation</option></select></div>
+            </div>
+            <div class="field"><label for="ft_prob">Main problem you see on your farm right now</label><select id="ft_prob"><option value="">-- select problem --</option><option>Yellow leaves on plants</option><option>Plants not growing tall - stunted growth</option><option>Soil is very hard and difficult to dig</option><option>Low yield compared to last year</option><option>Water stays on the field after rain</option><option>Soil dries out very fast after rain</option><option>No major problem - just starting fresh</option></select></div>
+            <button class="btn primary" id="ft_btn" onclick="FC.runFert()">✨ Generate my fertilizer plan</button>
+            <div class="result-box" id="ft_result" aria-live="polite"><div class="result-tag">Your personalised fertilizer plan</div><div class="result-text" id="ft_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('ft_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('ft_text','Fertilizer Plan')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('fertilizer')">Print / Save as PDF</button></div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-profit">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">💰</div><div><div class="toolcard-title">Profit forecast calculator</div><div class="toolcard-sub">See your expected costs, revenue and profit for your crop</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="pf_crop">Crop to grow</label><select id="pf_crop"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Onion</option><option>Sugarcane</option></select></div>
+              <div class="field"><label for="pf_acres">Farm size</label><select id="pf_acres"><option value="">-- select --</option><option value="1">1 acre</option><option value="2">2 acres</option><option value="5">5 acres</option><option value="10">10 acres</option><option value="25">25 acres</option><option value="50">50 acres</option><option value="100">100 acres</option></select></div>
+            </div>
+            <div class="field-grid">
+              <div class="field"><label for="pf_region">Your country / region</label><select id="pf_region"><option value="">-- select --</option><option>India</option><option>USA</option><option>Brazil</option><option>UK</option><option>Australia</option><option>Sub-Saharan Africa</option><option>Southeast Asia</option></select></div>
+              <div class="field"><label for="pf_irr">Irrigation type</label><select id="pf_irr"><option value="">-- select --</option><option>Rain only - no irrigation</option><option>Borewell / tube well</option><option>Canal / river water</option><option>Drip irrigation system</option></select></div>
+            </div>
+            <button class="btn primary" id="pf_btn" onclick="FC.runProfit()">✨ Calculate my profit forecast</button>
+            <div id="pf_stats" class="stat-row" style="display:none"></div>
+            <div class="result-box" id="pf_result" aria-live="polite"><div class="result-tag">Full cost and profit breakdown</div><div id="pf_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('pf_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('pf_text','Profit Forecast')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('profit')">Print / Save as PDF</button></div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-disease">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">🔍</div><div><div class="toolcard-title">Plant disease and pest checker</div><div class="toolcard-sub">Tell us what you see - get an instant diagnosis and treatment plan</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="dis_crop">Your crop</label><select id="dis_crop"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Onion</option><option>Vegetables (general)</option></select></div>
+              <div class="field"><label for="dis_part">Which part of the plant is affected?</label><select id="dis_part"><option value="">-- select --</option><option>Leaves</option><option>Stem or stalk</option><option>Roots</option><option>Fruit or grain</option><option>Whole plant</option></select></div>
+            </div>
+            <div class="field"><label for="dis_photo">Have a photo? Upload it for a more accurate check (optional)</label>
+              <input type="file" id="dis_photo" accept="image/*" onchange="FC.onDiseasePhoto(event)" aria-label="Upload a photo of the affected plant">
+              <div id="dis_photo_preview" style="display:none;margin-top:10px">
+                <img id="dis_photo_img" alt="Uploaded photo of the affected plant" style="max-width:180px;border-radius:8px;border:1px solid var(--line)">
+                <button class="btn ghost tiny" style="margin-left:10px" onclick="FC.clearDiseasePhoto()">Remove photo</button>
+              </div>
+            </div>
+            <div class="field"><label>What symptom do you see? (select the closest match - still useful even with a photo)</label></div>
+            <div class="symptom-grid" id="symptom-grid">
+              <button class="symptom-btn" onclick="FC.selectSym(this,'yellow spots on leaves')"><span class="symptom-icon">🟡</span>Yellow spots on leaves</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'brown or black spots on leaves')"><span class="symptom-icon">🟤</span>Brown / black spots</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'white powdery coating on leaves')"><span class="symptom-icon">⬜</span>White powder on leaves</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'leaves curling or rolling inward')"><span class="symptom-icon">🌀</span>Leaves curling</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'holes eaten in leaves by insects')"><span class="symptom-icon">🕳️</span>Holes in leaves</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'plant wilting and drooping despite watering')"><span class="symptom-icon">😔</span>Wilting / drooping</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'sticky or shiny substance on leaves')"><span class="symptom-icon">💧</span>Sticky substance</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'small insects visible on the plant')"><span class="symptom-icon">🐛</span>Small insects visible</button>
+              <button class="symptom-btn" onclick="FC.selectSym(this,'rotting at the base of stem, plant falling over')"><span class="symptom-icon">💀</span>Rotting at base</button>
+            </div>
+            <input type="text" id="dis_sym_val" placeholder="Selected symptom will appear here..." readonly style="margin-bottom:12px;background:var(--cream-2);cursor:default">
+            <div class="field-grid">
+              <div class="field"><label for="dis_spread">How much of your farm is affected?</label><select id="dis_spread"><option value="">-- select --</option><option>Just 1 or 2 plants</option><option>About 10% of the farm</option><option>About half the farm</option><option>Most or all of the farm</option></select></div>
+              <div class="field"><label for="dis_when">When did you first notice this?</label><select id="dis_when"><option value="">-- select --</option><option>Just today</option><option>2 to 3 days ago</option><option>About a week ago</option><option>More than 2 weeks ago</option></select></div>
+            </div>
+            <div class="field"><label for="dis_notes">Anything else to add? Speak or type it (optional)</label>
+              <div style="display:flex;gap:8px">
+                <textarea id="dis_notes" placeholder="e.g. it started after heavy rain, only on the lower leaves..." style="flex:1;min-height:44px"></textarea>
+                <button class="btn ghost mic-btn" id="dis_mic_btn" onclick="FC.toggleVoiceInput('dis_notes','dis_mic_btn')" style="flex:none;height:44px" aria-label="Speak to describe the problem">Speak</button>
+              </div>
+            </div>
+            <button class="btn primary" id="dis_btn" onclick="FC.runDisease()">🔍 Diagnose my plant problem</button>
+            <div class="result-box" id="dis_result" aria-live="polite"><div class="result-tag">Disease diagnosis and treatment plan</div><div class="result-text" id="dis_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('dis_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('dis_text','Disease Diagnosis')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('disease')">Print / Save as PDF</button></div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-weather">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">🌤</div><div><div class="toolcard-title">Weather-based farming advice</div><div class="toolcard-sub">Tell us your weather conditions - get advice on what to do on your farm today</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="wt_region">Your region</label><select id="wt_region"><option value="">-- select --</option><option>North India</option><option>South India</option><option>Maharashtra, India</option><option>US Midwest</option><option>US South</option><option>Brazil</option><option>UK and Ireland</option><option>Australia</option><option>East Africa</option><option>Southeast Asia</option></select></div>
+              <div class="field"><label for="wt_crop">Current crop</label><select id="wt_crop"><option value="">-- select --</option><option>Wheat</option><option>Rice / paddy</option><option>Corn / maize</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Vegetables</option></select></div>
+            </div>
+            <div class="field-grid">
+              <div class="field"><label for="wt_stage">Crop growth stage</label><select id="wt_stage"><option value="">-- select --</option><option>Just planted seeds - germination stage</option><option>Seedling stage - 2 to 4 weeks old</option><option>Vegetative / growing stage - 1 to 2 months old</option><option>Flowering stage</option><option>Grain filling or fruiting stage</option><option>Almost ready to harvest</option></select></div>
+              <div class="field"><label for="wt_weather">How does the weather feel today?</label><select id="wt_weather"><option value="">-- select --</option><option>Very hot and dry - above 40 degrees Celsius</option><option>Hot - 30 to 40 degrees Celsius</option><option>Warm and pleasant - 20 to 30 degrees</option><option>Cool - 10 to 20 degrees Celsius</option><option>Cold - below 10 degrees, risk of frost</option><option>Rainy and cloudy today</option><option>Windy and dry</option></select></div>
+            </div>
+            <button class="btn primary" id="wt_btn" onclick="FC.runWeather()">🌤 Get my farming advice for today</button>
+            <div class="result-box" id="wt_result" aria-live="polite"><div class="result-tag">Your farming advice for today</div><div class="result-text" id="wt_text"></div><div class="result-actions"><button class="btn ghost tiny" onclick="FC.readAloud('wt_text')">Read aloud</button><button class="btn ghost tiny" onclick="FC.shareResult('wt_text','Weather Advice')">Share</button><button class="btn ghost tiny" onclick="FC.printToolResult('weather')">Print / Save as PDF</button></div></div>
+          </div>
+        </section>
+
+        <section class="panel" id="tool-diary">
+          <div class="toolcard">
+            <div class="toolcard-header"><div class="toolcard-icon">📓</div><div><div class="toolcard-title">Farm diary</div><div class="toolcard-sub">Log what you did today - keep a record of all your farming activities</div></div></div>
+            <div class="field-grid">
+              <div class="field"><label for="dy_act">What farming activity did you do today?</label><select id="dy_act"><option value="">-- select activity --</option><option>Irrigated the farm</option><option>Applied fertilizer</option><option>Sprayed pesticide or fungicide</option><option>Ploughed or tilled the soil</option><option>Planted seeds or seedlings</option><option>Did weeding</option><option>Harvested the crop</option><option>Sold produce at market</option><option>Soil testing done</option><option>Farm inspection - checked field</option></select></div>
+              <div class="field"><label for="dy_crop">Which crop?</label><select id="dy_crop"><option value="">-- select --</option><option>Wheat</option><option>Rice</option><option>Corn</option><option>Potato</option><option>Tomato</option><option>Cotton</option><option>Soybean</option><option>Vegetables</option><option>Multiple crops</option></select></div>
+            </div>
+            <div class="field"><label for="dy_note">Observation or note (optional)</label><select id="dy_note"><option value="">-- select observation --</option><option>Everything looks healthy and good</option><option>Noticed some yellow leaves</option><option>Soil felt very dry</option><option>Saw insects or pests</option><option>Good rain fell today</option><option>Plants growing very well</option><option>Crop almost ready to harvest</option><option>Applied 25 kg fertilizer per acre</option><option>Low yield this season</option></select></div>
+            <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px">
+              <button class="btn primary" onclick="FC.addEntry()" style="width:auto">+ Log this activity</button>
+              <button class="btn ghost" id="dy_sum_btn" onclick="FC.runDiarySummary()" style="width:auto">✨ Weekly summary</button>
+            </div>
+            <div class="result-box" id="dy_sum_result"></div>
+            <div id="dy_list">
+              <div style="font-size:13px;font-weight:600;color:var(--soil-2);margin-bottom:10px;display:flex;align-items:center;gap:6px">📋 Recent farm diary entries</div>
+              <div class="diary-entry"><div class="diary-meta"><span class="diary-date">24 Jun 2026</span><span class="tag tag-green">Applied fertilizer</span><span class="tag tag-yellow">Wheat</span></div><div class="diary-text">Applied urea - 25 kg per acre. Soil was dry. Watered lightly after application. Plants look healthy.</div></div>
+              <div class="diary-entry"><div class="diary-meta"><span class="diary-date">22 Jun 2026</span><span class="tag tag-blue">Irrigated the farm</span><span class="tag tag-yellow">Wheat</span></div><div class="diary-text">Irrigated for 3 hours using borewell. Plants growing well. No disease or pest visible.</div></div>
+              <div class="diary-entry"><div class="diary-meta"><span class="diary-date">18 Jun 2026</span><span class="tag tag-green">Ploughed or tilled the soil</span><span class="tag tag-yellow">Wheat</span></div><div class="diary-text">Ploughed the field before planting. Soil was dry and slightly hard. Added compost before ploughing.</div></div>
+            </div>
+          </div>
+        </section>
+      </div>
+
+      <!-- ============ FIELD OFFICE (CRM) MODE ============ -->
+      <div id="mode-fieldoffice" class="modepanel">
+        <section class="view active" id="crmview-dash">
+          <p class="eyebrow">Field office overview</p>
+          <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+            <div>
+              <h2 class="viewtitle">How the Copilot is serving farmers</h2>
+              <p class="viewnote">Live counts pulled from saved farmer records and every interaction logged.</p>
+            </div>
+            <button class="btn ghost" onclick="FC.printDashboard()" style="flex:none">Print / PDF</button>
+          </div>
+          <div class="stats">
+            <div class="stat"><div class="k">Farmers tracked</div><div class="v" id="m-farmers">0</div><div class="d">profiles on file</div></div>
+            <div class="stat"><div class="k">Interactions</div><div class="v" id="m-interactions">0</div><div class="d">advice events logged</div></div>
+            <div class="stat"><div class="k">Active farmers</div><div class="v" id="m-active">0</div><div class="d">engaged + leads</div></div>
+            <div class="stat"><div class="k">Qualified leads</div><div class="v" id="m-leads">0</div><div class="d">ready for outreach</div></div>
+            <div class="stat"><div class="k">Avg. rating</div><div class="v" id="m-quality"> - </div><div class="d">of rated advice</div></div>
+          </div>
+
+          <div class="insight-card">
+            <h3>✨ Portfolio Insights</h3>
+            <p class="sub">Review the whole farmer book and surface what needs attention</p>
+            <button class="btn ghost tiny" id="pi-btn" onclick="FC.runPortfolioInsights()" style="width:auto;background:rgba(255,255,255,.12);border-color:rgba(255,255,255,.3);color:#fff">Generate insights</button>
+            <div class="insight-body" id="pi-body"></div>
+          </div>
+
+          <div class="panelgrid">
+            <div class="panel-box"><h3>Recent activity</h3><ul class="feed" id="feed"></ul></div>
+            <div class="panel-box"><h3>Tool usage</h3><div id="toolbars"></div></div>
+          </div>
+          <div class="panelgrid2">
+            <div class="panel-box"><h3>Farmer status breakdown</h3><div class="donut-wrap"><div id="status-donut"></div><ul class="donut-legend" id="status-legend"></ul></div></div>
+            <div class="panel-box"><h3>Interactions - last 6 months</h3><div id="trend-chart"></div></div>
+          </div>
+          <div class="panelgrid2">
+            <div class="panel-box" style="grid-column:1/-1"><h3>Farmer growth (cumulative, last 6 months)</h3><div id="growth-chart"></div></div>
+          </div>
+        </section>
+
+        <section class="view" id="crmview-farmers">
+          <p class="eyebrow">Customer directory</p>
+          <h2 class="viewtitle">Farmer profiles</h2>
+          <p class="viewnote">Click any farmer to open their full profile and advice history. Click a column to sort.</p>
+          <div class="toolbar">
+            <input type="search" id="f-search" placeholder="Search name, region, crop...">
+            <select id="f-status"><option value="">All statuses</option><option value="new">New</option><option value="active">Active</option><option value="lead">Qualified lead</option><option value="dormant">Dormant</option></select>
+            <span class="spacer"></span>
+            <button class="btn ghost" onclick="FC.exportFarmersCSV()">⬇ Export CSV</button>
+            <button class="btn ghost" onclick="FC.printFarmersList()">🖨 Print / PDF</button>
+            <button class="btn primary" id="btn-add-farmer">+ Add farmer</button>
+          </div>
+          <div class="tablewrap"><table><thead><tr>
+            <th class="sortable" data-field="name" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('name')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('name');}">Farmer <span class="arrow"></span></th>
+            <th class="sortable" data-field="region" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('region')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('region');}">Region <span class="arrow"></span></th>
+            <th class="sortable" data-field="crop" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('crop')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('crop');}">Crop <span class="arrow"></span></th>
+            <th class="sortable" data-field="interactions" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('interactions')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('interactions');}">Interactions <span class="arrow"></span></th>
+            <th class="sortable" data-field="lastSeen" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('lastSeen')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('lastSeen');}">Last seen <span class="arrow"></span></th>
+            <th class="sortable" data-field="status" tabindex="0" role="columnheader button" onclick="FC.sortFarmers('status')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortFarmers('status');}">Status <span class="arrow"></span></th>
+          </tr></thead><tbody id="farmers-body"></tbody></table></div>
+        </section>
+
+        <section class="view" id="crmview-log">
+          <p class="eyebrow">Activity ledger</p>
+          <h2 class="viewtitle">Interaction log</h2>
+          <p class="viewnote">Every piece of advice generated, across all six tools. Click a column to sort.</p>
+          <div class="toolbar">
+            <input type="search" id="l-search" placeholder="Search farmer or detail...">
+            <select id="l-tool"><option value="">All tools</option>${Object.keys(TOOLS).map(k=>`<option value="${k}">${TOOLS[k].label}</option>`).join("")}</select>
+            <span class="spacer"></span>
+            <button class="btn ghost" onclick="FC.exportLogCSV()">⬇ Export CSV</button>
+            <button class="btn ghost" onclick="FC.printLog()">🖨 Print / PDF</button>
+            <button class="btn primary" id="btn-add-log">+ Log interaction</button>
+          </div>
+          <div class="tablewrap"><table><thead><tr>
+            <th class="sortable" data-field="date" tabindex="0" role="columnheader button" onclick="FC.sortLog('date')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortLog('date');}">Date <span class="arrow"></span></th>
+            <th class="sortable" data-field="farmer" tabindex="0" role="columnheader button" onclick="FC.sortLog('farmer')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortLog('farmer');}">Farmer <span class="arrow"></span></th>
+            <th class="sortable" data-field="tool" tabindex="0" role="columnheader button" onclick="FC.sortLog('tool')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortLog('tool');}">Tool <span class="arrow"></span></th>
+            <th>What was advised</th>
+            <th class="sortable" data-field="quality" tabindex="0" role="columnheader button" onclick="FC.sortLog('quality')" onkeydown="if(event.key==='Enter'||event.key===' '){event.preventDefault();FC.sortLog('quality');}">Output quality <span class="arrow"></span></th>
+          </tr></thead><tbody id="log-body"></tbody></table></div>
+        </section>
+      </div>
+    </main>
+
+    <div class="footer">
+      <span>Agronome</span>
+      <button class="seed" id="btn-reset">Reset sample data</button>
+    </div>
+
+    <div class="scrim" id="scrim"></div>
+    <aside class="drawer" id="drawer" role="dialog" aria-modal="true" aria-label="Farmer profile">
+      <div class="dhead" style="position:relative">
+        <button class="x" id="d-close" aria-label="Close farmer profile">✕</button>
+        <h3 id="d-name"></h3>
+        <div class="farm" id="d-farm"></div>
+      </div>
+      <div class="dbody">
+        <dl class="kv" id="d-kv"></dl>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;">
+          <button class="btn primary tiny" id="d-add-ix">+ Log interaction</button>
+          <button class="btn ghost tiny" id="d-use-copilot">🌱 Open Copilot for this farmer</button>
+          <button class="btn ghost tiny" id="d-export">⬇ Export report</button>
+          <button class="btn ghost tiny" id="d-print">🖨 Print / PDF</button>
+          <button class="btn ghost tiny" id="d-edit">✏️ Edit farmer</button>
+          <button class="btn ghost tiny" id="d-delete" style="color:var(--rust);border-color:var(--rust)">🗑 Delete farmer</button>
+        </div>
+        <input type="hidden" id="log-add-for">
+        <h4>Advice history</h4>
+        <ul class="timeline" id="d-timeline"></ul>
+      </div>
+    </aside>
+
+    <div class="modal" id="farmer-modal" role="dialog" aria-modal="true" aria-labelledby="fm-title">
+      <div class="card">
+        <div class="mhead"><h3 id="fm-title">Add farmer</h3><button data-close aria-label="Close dialog">✕</button></div>
+        <div class="mbody">
+          <input type="hidden" id="nf-editing-id">
+          <div class="field"><label for="nf-name">Name</label><input id="nf-name" placeholder="Full name"></div>
+          <div class="row2"><div class="field"><label for="nf-region">Region</label><input id="nf-region" placeholder="e.g. North India (Punjab)"></div><div class="field"><label for="nf-phone">Phone</label><input id="nf-phone" placeholder="Contact number"></div></div>
+          <div class="row2"><div class="field"><label for="nf-crop">Main crop</label><input id="nf-crop" placeholder="e.g. Wheat"></div><div class="field"><label for="nf-size">Farm size</label><input id="nf-size" placeholder="e.g. 3 acres"></div></div>
+          <div class="row2"><div class="field"><label for="nf-soil">Soil type</label><input id="nf-soil" placeholder="e.g. Loamy"></div><div class="field"><label for="nf-water">Water source</label><input id="nf-water" placeholder="e.g. Borewell"></div></div>
+          <div class="field"><label for="nf-status">Status</label><select id="nf-status"><option value="new">New</option><option value="active">Active</option><option value="lead">Qualified lead</option><option value="dormant">Dormant</option></select></div>
+        </div>
+        <div class="mfoot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="nf-save">Save farmer</button></div>
+      </div>
+    </div>
+
+    <div class="modal" id="log-modal" role="dialog" aria-modal="true" aria-label="Log interaction">
+      <div class="card">
+        <div class="mhead"><h3>Log interaction</h3><button data-close aria-label="Close dialog">✕</button></div>
+        <div class="mbody">
+          <div class="field"><label for="lg-farmer">Farmer</label><select id="lg-farmer"></select></div>
+          <div class="row2">
+            <div class="field"><label for="lg-tool">Tool used</label><select id="lg-tool">${Object.keys(TOOLS).map(k=>`<option value="${k}">${TOOLS[k].label}</option>`).join("")}</select></div>
+            <div class="field"><label for="lg-date">Date</label><input type="date" id="lg-date"></div>
+          </div>
+          <div class="field"><label for="lg-detail">What was advised</label><textarea id="lg-detail" placeholder="Summary of the advice the app generated..."></textarea></div>
+          <div class="field"><label for="lg-quality">Output quality (optional)</label><select id="lg-quality"><option value="">Not rated</option><option value="5">★★★★★</option><option value="4">★★★★</option><option value="3">★★★</option><option value="2">★★</option><option value="1">★</option></select></div>
+        </div>
+        <div class="mfoot"><button class="btn ghost" data-close>Cancel</button><button class="btn primary" id="lg-save">Save to log</button></div>
+      </div>
+    </div>
+
+    <div id="print-area"></div>`;
+
+    populateFarmerSelect();
+    renderCtxHint();
+
+    $("#f-search").oninput = renderFarmers;
+    $("#f-status").onchange = renderFarmers;
+    $("#l-search").oninput = renderLog;
+    $("#l-tool").onchange = renderLog;
+    $("#btn-add-farmer").onclick = openFarmerModal;
+    $("#btn-add-log").onclick = ()=>openLogModal();
+    $("#d-close").onclick = closeDrawer;
+    $("#scrim").onclick = closeDrawer;
+    $("#d-add-ix").onclick = ()=>openLogModal($("#log-add-for").value);
+    $("#d-use-copilot").onclick = ()=>{ const id=$("#log-add-for").value; currentFarmerId=id; $("#ctx-farmer").value=id; renderCtxHint(); closeDrawer(); showMode('copilot'); };
+    $("#d-export").onclick = ()=>exportFarmerReport($("#log-add-for").value);
+    $("#d-print").onclick = ()=>printFarmerReport($("#log-add-for").value);
+    $("#d-edit").onclick = ()=>openEditFarmerModal($("#log-add-for").value);
+    $("#d-delete").onclick = ()=>deleteFarmer($("#log-add-for").value);
+    $("#nf-save").onclick = addFarmer;
+    $("#lg-save").onclick = addLog;
+    $$("[data-close]").forEach(b=>b.onclick=closeModals);
+    $$(".modal").forEach(m=>m.onclick=e=>{ if(e.target===m) closeModals(); });
+    $("#btn-reset").onclick = async()=>{
+      if(!confirm("Reset all farmers and interactions back to the original sample data? This cannot be undone.")) return;
+      DB=seed(); currentFarmerId=null;
+      await save();
+      populateFarmerSelect(); renderCtxHint();
+      showMode("fieldoffice"); showCRM("dash");
+      renderFarmers(); renderLog();
+      showToast("Sample data has been reset.");
+    };
+    document.addEventListener("keydown", e=>{ if(e.key==="Escape"){ closeDrawer(); closeModals(); } });
+  }
+
+  function onCtxChange(){
+    currentFarmerId = $("#ctx-farmer").value || null;
+    renderCtxHint();
+    autofillForFarmer();
+  }
+
+  /* ---------- login gate ---------- */
+  function buildLogin(){
+    $("#app").innerHTML = `
+    <div class="login-wrap">
+      <div class="login-shell">
+        <div class="login-hero">
+          <div class="login-hero-inner">
+            <div class="login-brand"><div class="sprout">🌾</div><h1>Agronome</h1></div>
+            <p class="login-tag">Your personal farming expert.<br>Always in your pocket.</p>
+            <ul class="login-features">
+              <li><span class="lf-ic">🌱</span><span>Six tools built for real field decisions</span></li>
+              <li><span class="lf-ic">📓</span><span>Your own advice history, saved under your name</span></li>
+              <li><span class="lf-ic">🌤</span><span>Instant, plain-language answers - every time</span></li>
+            </ul>
+          </div>
+          <svg class="login-rows" viewBox="0 0 400 120" preserveAspectRatio="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M0,90 Q100,60 200,90 T400,90 V120 H0 Z" fill="rgba(255,255,255,0.05)"/>
+            <path d="M0,100 Q100,75 200,100 T400,100 V120 H0 Z" fill="rgba(255,255,255,0.07)"/>
+            <path d="M0,110 Q100,92 200,110 T400,110 V120 H0 Z" fill="rgba(255,255,255,0.1)"/>
+          </svg>
+          <div class="login-hero-furrow"></div>
+        </div>
+
+        <div class="login-form-panel">
+          <div class="login-tabs">
+            <button class="login-tab active" id="login-tab-existing">🌾 I'm already registered</button>
+            <button class="login-tab" id="login-tab-new">✨ I'm new here</button>
+          </div>
+
+          <div id="login-pane-existing" class="login-pane active">
+            <div class="field"><label for="login-farmer-select">Select your profile</label>
+              <select id="login-farmer-select">
+                <option value="">-- Choose your name --</option>
+                ${DB.farmers.map(f=>`<option value="${f.id}">${esc(f.name)} · ${esc(f.crop)}, ${esc(f.region)}</option>`).join("")}
+              </select>
+            </div>
+            <div class="login-error" id="login-farmer-err"></div>
+            <button class="btn primary" id="login-farmer-btn" style="width:100%">Log in</button>
+          </div>
+
+          <div id="login-pane-new" class="login-pane">
+            <div class="row2">
+              <div class="field"><label for="login-nf-name">Your name</label><input id="login-nf-name" placeholder="Full name"></div>
+              <div class="field"><label for="login-nf-phone">Phone (optional)</label><input id="login-nf-phone" placeholder="Contact number"></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="login-nf-region">Region</label><input id="login-nf-region" placeholder="e.g. North India (Punjab)"></div>
+              <div class="field"><label for="login-nf-crop">Main crop</label><input id="login-nf-crop" placeholder="e.g. Wheat"></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="login-nf-size">Farm size</label><input id="login-nf-size" placeholder="e.g. 3 acres"></div>
+              <div class="field"><label for="login-nf-soil">Soil type</label><input id="login-nf-soil" placeholder="e.g. Loamy"></div>
+            </div>
+            <div class="row2">
+              <div class="field"><label for="login-nf-pw">Create a password</label><input type="password" id="login-nf-pw" placeholder="Choose a password"></div>
+              <div class="field"><label for="login-nf-pw2">Confirm password</label><input type="password" id="login-nf-pw2" placeholder="Re-enter password"></div>
+            </div>
+            <div class="login-error" id="login-nf-err"></div>
+            <button class="btn primary" id="login-nf-btn" style="width:100%">Create profile &amp; log in</button>
+          </div>
+
+          <div class="login-staff">
+            <a href="javascript:void(0)" id="login-staff-link">📇 Field Office staff - enter here</a>
+            <div id="login-staff-form" style="display:none;margin-top:14px;text-align:left">
+              <div class="field"><label for="login-staff-name">Staff name</label><input id="login-staff-name" placeholder="Your name"></div>
+              <div class="field"><label for="login-staff-pw">Access code</label><input type="password" id="login-staff-pw" placeholder="Field Office access code"></div>
+              <div class="login-error" id="login-staff-err"></div>
+              <button class="btn ghost" id="login-staff-btn" style="width:100%">Enter Field Office</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>`;
+    $("#login-tab-existing").onclick = ()=>loginTab("existing");
+    $("#login-tab-new").onclick = ()=>loginTab("new");
+    $("#login-farmer-btn").onclick = async ()=>{
+      const id = $("#login-farmer-select").value;
+      const errEl = $("#login-farmer-err");
+      errEl.textContent = "";
+      if(!id){ errEl.textContent = "Please choose your name from the list."; return; }
+      await loginAsFarmer(id);
+    };
+    $("#login-nf-btn").onclick = async ()=>{
+      const name = $("#login-nf-name").value.trim();
+      const pw = $("#login-nf-pw").value;
+      const pw2 = $("#login-nf-pw2").value;
+      const errEl = $("#login-nf-err");
+      errEl.textContent = "";
+      if(!name){ $("#login-nf-name").focus(); return; }
+      if(!pw || pw.length < 4){ errEl.textContent = "Please choose a password of at least 4 characters."; return; }
+      if(pw !== pw2){ errEl.textContent = "Passwords don't match."; return; }
+      const id = "F-"+(1054+DB.farmers.length);
+      DB.farmers.push({
+        id, name,
+        region: $("#login-nf-region").value.trim() || " - ",
+        crop: $("#login-nf-crop").value.trim() || " - ",
+        size: $("#login-nf-size").value.trim() || " - ",
+        soil: $("#login-nf-soil").value.trim() || " - ",
+        water: " - ",
+        phone: $("#login-nf-phone").value.trim() || " - ",
+        password: pw,
+        status: "new",
+        joined: todayISO()
+      });
+      await save();
+      await loginAsFarmer(id);
+    };
+    $("#login-staff-link").onclick = ()=>{
+      const f = $("#login-staff-form");
+      f.style.display = f.style.display === "none" ? "block" : "none";
+    };
+    $("#login-staff-btn").onclick = async ()=>{
+      const name = $("#login-staff-name").value.trim();
+      const pw = $("#login-staff-pw").value;
+      const errEl = $("#login-staff-err");
+      errEl.textContent = "";
+      if(!name){ $("#login-staff-name").focus(); return; }
+      if(pw !== STAFF_PASSCODE){ errEl.textContent = "Incorrect access code."; return; }
+      await loginAsStaff(name);
+    };
+  }
+  function loginTab(which){
+    $$(".login-tab").forEach(b=>b.classList.remove("active"));
+    $$(".login-pane").forEach(p=>p.classList.remove("active"));
+    $("#login-tab-"+which).classList.add("active");
+    $("#login-pane-"+which).classList.add("active");
+  }
+  async function loginAsFarmer(id){
+    session = { type:"farmer", farmerId:id };
+    currentFarmerId = id;
+    await saveSession();
+    await render();
+  }
+  async function loginAsStaff(name){
+    session = { type:"staff", staffName:name };
+    currentFarmerId = null;
+    await saveSession();
+    await render();
+  }
+  async function logout(){
+    if(!confirm("Log out?")) return;
+    session = null;
+    currentFarmerId = null;
+    await saveSession();
+    await render();
+  }
+  async function render(){
+    if(!session){ buildLogin(); applyTheme(); return; }
+    buildApp();
+    renderDash(); renderFarmers(); renderLog();
+    if(session.type === "staff"){ showMode("fieldoffice"); }
+    applyTheme();
+  }
+
+  /* ---------- public surface for inline handlers ---------- */
+  window.FC = {
+    showMode, showTool, showCRM, openFarmerModal, openEditFarmerModal, deleteFarmer, onCtxChange, logout, loginTab,
+    runCrop, runFert, runProfit, runDisease, runWeather, addEntry, runDiarySummary, selectSym, runCompare,
+    onDiseasePhoto, clearDiseasePhoto, readAloud, toggleVoiceInput, shareResult,
+    runPortfolioInsights, sortFarmers, sortLog, exportFarmersCSV, exportLogCSV, exportFarmerReport,
+    printFarmerReport, printFarmersList, printLog, printToolResult, printDashboard, toggleTheme, setLanguage
+  };
+
+  /* ---------- init ---------- */
+  (async function(){
+    await load();
+    await loadSession();
+    await loadPrefs();
+    await render();
+    applyTheme();
+  })();
+})();
+</script>
